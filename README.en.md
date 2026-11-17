@@ -36,7 +36,7 @@ as well: an addon's database, exports, pictures.
 
 - **Source:** a folder below `/usr/local`, chosen in a folder picker. **Never copied** and never offered: the settings
   of the system and of every addon (`/usr/local/etc`, with their keys and passwords - they leave the system in its
-  backup, encrypted), backups of the system, temporary files, program files. Files that look like keys and tokens
+  backup, encrypted), backups of the system, temporary files, the addons' program files. Files that look like keys and tokens
   (`*.pem`, `*.key`, `id_*`, `*token*` …) are left out by default. Another addon's data can be chosen; the job then
   reads it with that addon's rights, and the dialog says what that opens.
 - **Target:** an account (with rclone) or an **SSH server** (with rsync). For an SSH server the addon makes a key pair
@@ -51,6 +51,10 @@ as well: an addon's database, exports, pictures.
   and is left alone until you replace it.
 - **History:** every run with what it copied, replaced and deleted, its errors and its file list; the runs are also
   in the system log under the job's unit.
+
+![Copy jobs](docs/screenshots/04-kopierauftraege.png)
+
+![A copy job](docs/screenshots/05-auftrag.png)
 
 ## Logging in at OneDrive, Google Drive, Dropbox
 

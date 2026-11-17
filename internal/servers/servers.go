@@ -479,6 +479,19 @@ func Classify(stderr string, exit int) string {
 	return StateError
 }
 
+// firstLine is the first line that says something, cut to a line's length.
+func firstLine(s string) string {
+	for _, l := range strings.Split(s, "\n") {
+		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "rsync error:") && !strings.HasPrefix(l, "Warning: Permanently added") {
+			if r := []rune(l); len(r) > 300 {
+				return string(r[:300]) + "…"
+			}
+			return l
+		}
+	}
+	return lastLine(s)
+}
+
 func lastLine(s string) string {
 	lines := strings.Split(strings.TrimSpace(s), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -543,7 +556,9 @@ func (s *Store) Test(ctx context.Context, id string) (Server, error) {
 	}
 	state, text := Classify(stderr, exit), ""
 	if state != StateOK {
-		text = lastLine(stderr)
+		// ssh's own line comes first ("Permission denied (publickey)"); rsync's "connection
+		// unexpectedly closed" after it says less
+		text = firstLine(stderr)
 		if s.Log != nil {
 			s.Log("the test of the server %s failed: rsync exit %d, %s: %s", v.Name, exit, state, text)
 		}

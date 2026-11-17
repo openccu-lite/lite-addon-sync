@@ -107,16 +107,21 @@
                                     {/if}
                                 </span>
                             </td>
+                            <!-- two lines, always: what the job does now, and what is done to the job -->
                             <td class="sy-cell-actions">
-                                {#if j.running}
-                                    <button class="hmm-button sy-sized" onclick={() => void stop(j)} data-testid="job-stop"><span>{t('Stop')}</span><span class="sy-size" aria-hidden="true">{t('Run now')}</span></button>
-                                {:else}
-                                    <button class="hmm-button sy-sized" onclick={() => void run(j, false)} disabled={busy !== '' || !!j.needs_dry_run || !!j.target_gone} data-testid="job-run"><span>{t('Run now')}</span><span class="sy-size" aria-hidden="true">{t('Stop')}</span></button>
-                                {/if}
-                                <button class="hmm-button" onclick={() => void run(j, true)} disabled={busy !== '' || !!j.running || !!j.target_gone} title={t('Copies nothing: lists what a run would copy and delete.')} data-testid="job-try">{t('Try it')}</button>
-                                <button class="hmm-button" onclick={() => (dialog = {job: j})} disabled={!!j.running} data-testid="job-edit">{t('Edit')}</button>
-                                <a class="hmm-button" href={logHref(j)} target="_top" title={t('The runs of this job in the system log')} data-testid="job-log">{t('Log')}</a>
-                                <button class="hmm-button" onclick={() => (deleting = j)} disabled={!!j.running} data-testid="job-delete">{t('Delete')}</button>
+                                <div class="sy-actions-main">
+                                    {#if j.running}
+                                        <button class="hmm-button sy-sized" onclick={() => void stop(j)} data-testid="job-stop"><span>{t('Stop')}</span><span class="sy-size" aria-hidden="true">{t('Run now')}</span></button>
+                                    {:else}
+                                        <button class="hmm-button sy-sized" onclick={() => void run(j, false)} disabled={busy !== '' || !!j.needs_dry_run || !!j.target_gone} data-testid="job-run"><span>{t('Run now')}</span><span class="sy-size" aria-hidden="true">{t('Stop')}</span></button>
+                                    {/if}
+                                    <button class="hmm-button" onclick={() => void run(j, true)} disabled={busy !== '' || !!j.running || !!j.target_gone} title={t('Copies nothing: lists what a run would copy and delete.')} data-testid="job-try">{t('Try it')}</button>
+                                </div>
+                                <div class="sy-actions-more">
+                                    <button class="sy-linkbutton" onclick={() => (dialog = {job: j})} disabled={!!j.running} data-testid="job-edit">{t('Edit')}</button>
+                                    <a href={logHref(j)} target="_top" title={t('The runs of this job in the system log')} data-testid="job-log">{t('Log')}</a>
+                                    <button class="sy-linkbutton" onclick={() => (deleting = j)} disabled={!!j.running} data-testid="job-delete">{t('Delete')}</button>
+                                </div>
                             </td>
                         </tr>
                     {/each}

@@ -15,7 +15,7 @@ Copy jobs. For openccu-lite 2.0.0-beta.7 and newer (the first with timers an add
   off and keeps it.
 - **What is copied, and what never is.** The folder picker shows the system's own storage. Never offered and never
   copied: the settings of the system and of every addon (`/usr/local/etc`, with their keys and passwords), backups
-  of the system, temporary files, program files, this addon's own files. Files that look like keys and tokens are
+  of the system, temporary files, the addons' program files, this addon's own files. Files that look like keys and tokens are
   left out by default. Another addon's data can be chosen, and the job then reads it with that addon's rights - the
   dialog says what that opens.
 - **SSH servers** for rsync, beside the accounts: the addon makes a key pair per server and shows the line for the

@@ -49,13 +49,16 @@ func withRoot(t *testing.T) string {
 	}
 	Root = dir
 	t.Cleanup(func() { Root = old })
-	for _, d := range []string{"etc/config/addons/hmm", "tmp", "var/lib", "lost+found", "sdcard/doorbell", "sdcard/backup", "addons/sync/var", "addons/history/var", "addons/history/bin", "export/sub", "export/cache"} {
+	for _, d := range []string{"etc/config/addons/hmm", "tmp", "var/lib", "lost+found", "sdcard/doorbell", "sdcard/backup", "addons/sync/var", "addons/history/var", "addons/history/bin", "export/sub", "export/cache", "export/bin"} {
 		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for f, text := range map[string]string{
 		"sdcard/backup/ccu-2026-11-17.sbk.age": "x", "addons/history/bin/.nobackup": "", "export/a.txt": "a", "export/sub/b.txt": "b", "export/cache/c.tmp": "c",
+		// .nobackup alone says "not in the system's backup", not "program files": what is kept out of
+		// the backup because it is large is what a copy job is for
+		"sdcard/.nobackup": "", "addons/history/var/.nobackup": "", "addons/history/var/history.db": "db", "export/bin/.nobackup": "", "export/bin/tool": "x",
 		"etc/config/keys": "secret", "sdcard/doorbell/1.jpg": "jpg",
 	} {
 		if err := os.WriteFile(filepath.Join(dir, f), []byte(text), 0o644); err != nil {
@@ -157,15 +160,34 @@ func TestSources(t *testing.T) {
 		}
 	}
 
+	// tagged .nobackup, and still data: the SD card's folder, an addon's var, a bin outside the addons
+	for _, p := range []string{root + "/sdcard", root + "/sdcard/doorbell", root + "/addons/history/var", root + "/export/bin"} {
+		if _, err := CheckSourceOnDisk(p); err != nil {
+			t.Errorf("a .nobackup folder that is data: %s: %v", p, err)
+		}
+	}
+	if l, _ := List(root, nil); len(l.Folders) == 0 {
+		t.Fatal("no folders")
+	} else {
+		for _, f := range l.Folders {
+			if f.Name == "sdcard" && f.State != FolderOK {
+				t.Errorf("the SD card's folder: %+v", f)
+			}
+		}
+	}
+
 	// the exclude list of a run: fixed, the name filters, the user's, and what the walk finds
-	if err := os.MkdirAll(filepath.Join(root, "export", "tool"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "addons", "history", "var", "lib"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_ = os.WriteFile(filepath.Join(root, "export", "tool", ".nobackup"), nil, 0o644)
+	_ = os.WriteFile(filepath.Join(root, "addons", "history", "var", "lib", ".nobackup"), nil, 0o644)
+	if ex := strings.Join(Excludes(Job{}, root+"/addons/history/var"), "\n"); !strings.Contains(ex, "\n/lib/") {
+		t.Errorf("program files inside an addon's data:\n%s", ex)
+	}
 	_ = os.MkdirAll(filepath.Join(root, "export", "old", "backups"), 0o755)
 	_ = os.WriteFile(filepath.Join(root, "export", "old", "backups", "x.sbk"), nil, 0o644)
 	ex := strings.Join(Excludes(Job{NameFilters: true, Excludes: []string{"/cache/**"}}, root+"/export"), "\n")
-	for _, want := range []string{"*.sbk", "*.sbk.age", "*.partial", "*.pem", "id_*", "*token*", "/cache/**", "/tool/", "/old/backups/"} {
+	for _, want := range []string{"*.sbk", "*.sbk.age", "*.partial", "*.pem", "id_*", "*token*", "/cache/**", "/old/backups/"} {
 		if !strings.Contains("\n"+ex+"\n", "\n"+want+"\n") {
 			t.Errorf("the exclude list lacks %q:\n%s", want, ex)
 		}
@@ -398,6 +420,7 @@ func TestParseRclone(t *testing.T) {
 		`{"level":"info","msg":"Updated modification time in destination","object":"d.txt","time":"x"}`,
 		`{"level":"error","msg":"Failed to copy: 507 Insufficient Storage","object":"big.bin","time":"x"}`,
 		`{"level":"notice","msg":"\nTransferred: ...","stats":{"bytes":2048,"totalBytes":4096,"speed":1048576,"eta":3,"errors":1},"time":"x"}`,
+		`{"level":"error","msg":"Attempt 1/1 failed with 1 errors and: 507 Insufficient Storage","time":"x"}`,
 		`{"level":"info","msg":"There was nothing to transfer","time":"x"}`,
 		`not json at all`,
 		``,

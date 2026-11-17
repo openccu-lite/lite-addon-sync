@@ -23,7 +23,7 @@ const (
 	NeverConfig  = "config"  // /usr/local/etc: keys, passwords, the settings of the system and of every addon
 	NeverTemp    = "temp"    // tmp, var, lost+found
 	NeverBackups = "backups" // a folder that holds backups of the system
-	NeverProgram = "program" // an addon's program files (.nobackup)
+	NeverProgram = "program" // an addon's program files
 	NeverOwn     = "own"     // this addon's own tree
 	NeverRoot    = "root"    // /usr/local itself
 )
@@ -38,6 +38,23 @@ var neverBelow = map[string]string{
 
 // OwnAddon is this addon's id: its own tree is no source.
 var OwnAddon = "sync"
+
+// programDirs are the names an addon's program files lie under. The tag .nobackup alone does not
+// say "program files": it only says "not in the system's backup", and what a user keeps out of
+// the backup because it is large - a database, pictures on the SD card's folder - is exactly what
+// a copy job is for. So a folder counts as program files when it is inside an addon's tree, is
+// tagged .nobackup, and has one of these names.
+var programDirs = map[string]bool{"bin": true, "lib": true, "lib64": true, "libexec": true, "app": true, "www": true, "share": true, "include": true, "node_modules": true, "licences": true, "licenses": true}
+
+// programFiles says whether the folder p (cleaned, below Root) holds an addon's program files.
+func programFiles(p string) bool {
+	r, ok := rel(p)
+	if !ok || !strings.HasPrefix(r, "addons/") || !programDirs[filepath.Base(p)] {
+		return false
+	}
+	_, err := os.Lstat(filepath.Join(p, ".nobackup"))
+	return err == nil
+}
 
 // CleanSource checks a source lexically and answers it cleaned: an absolute path below Root, with
 // no "..", no control character, nothing a tool reads as an option, and not in the fixed list.
@@ -111,7 +128,7 @@ func CheckSourceOnDisk(p string) (string, error) {
 	if holdsBackups(real) {
 		return "", invalid("the source %s holds backups of the system, which go through the Backup page", p)
 	}
-	if _, err := os.Lstat(filepath.Join(real, ".nobackup")); err == nil {
+	if programFiles(real) {
 		return "", invalid("the source %s holds program files, not data", p)
 	}
 	return real, nil
@@ -197,7 +214,7 @@ func classify(p string, readable func(addon string) bool) Folder {
 		f.State = FolderUnreadable
 		return f
 	}
-	if _, err := os.Lstat(filepath.Join(p, ".nobackup")); err == nil {
+	if programFiles(p) {
 		f.State, f.Why = FolderNever, NeverProgram
 		return f
 	}
@@ -211,7 +228,9 @@ func classify(p string, readable func(addon string) bool) Folder {
 		f.State, f.Open = FolderOK, true
 		return f
 	}
-	if id := ownerAddon(info); id != "" && readable != nil && readable(id) {
+	// another addon's folder helps only when that addon left it open to its group: a folder it
+	// closed to everybody but itself (0700) stays closed to a job as well
+	if id := ownerAddon(info); id != "" && info.Mode().Perm()&0o050 == 0o050 && readable != nil && readable(id) {
 		f.State, f.Addon = FolderAddon, id
 		return f
 	}
@@ -265,7 +284,7 @@ var FixedPatterns = []string{"*.sbk", "*.sbk.age", "*.partial", "lost+found/"}
 
 // Excludes builds a run's exclude list for the resolved source: the fixed patterns, the default
 // name filters when the job has them, the user's patterns, and - found by walking the source -
-// every folder that holds program files (.nobackup) or backups of the system, as paths anchored at
+// every folder that holds an addon's program files or backups of the system, as paths anchored at
 // the source. The walk stops at 200000 entries; what lies beyond is not looked at (and the fixed
 // patterns still hold there).
 func Excludes(j Job, source string) []string {
@@ -288,7 +307,7 @@ func Excludes(j Job, source string) []string {
 		if !d.IsDir() || p == source {
 			return nil
 		}
-		if _, err := os.Lstat(filepath.Join(p, ".nobackup")); err == nil || holdsBackups(p) {
+		if programFiles(p) || holdsBackups(p) {
 			r, _ := filepath.Rel(source, p)
 			if !strings.ContainsAny(r, "\n\r*?[]{}\\") {
 				out = append(out, "/"+filepath.ToSlash(r)+"/")

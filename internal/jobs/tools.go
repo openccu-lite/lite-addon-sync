@@ -187,6 +187,10 @@ func parseRclone(line string, stderr bool, rl *runLog, rec *Record, prog *Progre
 	msg := strings.ToLower(l.Msg)
 	switch {
 	case l.Level == "error" || l.Level == "critical" || l.Level == "fatal":
+		// "Attempt 1/1 failed with 2 errors and: …" repeats the errors above it
+		if strings.HasPrefix(l.Msg, "Attempt ") && strings.Contains(l.Msg, " failed with ") {
+			return
+		}
 		text := l.Msg
 		if l.Object != "" {
 			text = l.Object + ": " + text

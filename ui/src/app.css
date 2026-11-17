@@ -308,7 +308,7 @@ a.hmm-button {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    min-width: 54rem;
+    min-width: 70rem;
 }
 .sy-table th,
 .sy-table td {
@@ -325,14 +325,28 @@ a.hmm-button {
     font-weight: 500;
     font-size: var(--hmm-font-size-small);
 }
-/* fixed columns: nothing moves when a job starts, ends or changes its pill */
-.sy-table th:nth-child(1) { width: 14%; }
-.sy-table th:nth-child(2) { width: 24%; }
-.sy-table th:nth-child(3) { width: 12%; }
-.sy-table th:nth-child(4) { width: 9%; }
-.sy-table th:nth-child(5) { width: 15%; }
-#history .sy-table th { width: auto; }
-#history .sy-table { min-width: 44rem; }
+/* fixed columns: nothing moves when a job starts, ends or changes its pill. The path takes what is
+   left; the pill's column fits the widest label, the last one the row's buttons */
+#jobs .sy-table th:nth-child(1) { width: 11rem; }
+#jobs .sy-table th:nth-child(3) { width: 10rem; }
+#jobs .sy-table th:nth-child(4) { width: 9.5rem; }
+#jobs .sy-table th:nth-child(5) { width: 13rem; }
+#jobs .sy-table th:nth-child(6) { width: 18rem; }
+#history .sy-table { min-width: 58rem; }
+#history .sy-table th:nth-child(1) { width: 9.5rem; }
+#history .sy-table th:nth-child(3) { width: 6rem; }
+#history .sy-table th:nth-child(4) { width: 13rem; }
+#history .sy-table th:nth-child(5) { width: 7rem; }
+#history .sy-table th:nth-child(6) { width: 6rem; }
+#history .sy-table th:nth-child(7) { width: 6rem; }
+/* the tables want more room than the cards: these two sections use the page's width */
+#jobs.sy-section,
+#history.sy-section {
+    max-width: 96rem;
+}
+.sy-table .sy-pill {
+    max-width: 100%;
+}
 .sy-cell-last {
     line-height: 1.3;
 }
@@ -346,11 +360,24 @@ a.hmm-button {
 }
 .sy-cell-actions {
     white-space: nowrap;
-    text-align: right !important;
     overflow: visible !important;
 }
-.sy-cell-actions > * {
-    margin-left: 4px;
+.sy-actions-main,
+.sy-actions-more {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px;
+}
+.sy-actions-more {
+    gap: 12px;
+    height: 1.5em;
+    font-size: var(--hmm-font-size-small);
+}
+.sy-linkbutton:disabled {
+    color: var(--hmm-fg-muted);
+    cursor: default;
+    text-decoration: none;
 }
 .sy-badge {
     display: inline-block;

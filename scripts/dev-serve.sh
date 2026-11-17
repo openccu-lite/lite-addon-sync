@@ -16,7 +16,7 @@ mkdir -p build "$DIR/addon" "$DIR/remote" "$DIR/conf" "$DIR/run"
 # a storage of its own for the copy jobs' folder picker (SYNC_ROOT; /usr/local on a system)
 mkdir -p "$DIR/storage/export/sub" "$DIR/storage/etc/config" "$DIR/storage/tmp" "$DIR/storage/sdcard/backup" "$DIR/storage/addons/tools/bin"
 echo alpha > "$DIR/storage/export/a.txt"; echo beta > "$DIR/storage/export/sub/b.txt"; echo KEY > "$DIR/storage/export/server.pem"
-echo x > "$DIR/storage/sdcard/backup/ccu-2026-11-17.sbk.age"; : > "$DIR/storage/addons/tools/bin/.nobackup"
+echo x > "$DIR/storage/sdcard/backup/ccu-2026-11-17.sbk.age"; : > "$DIR/storage/addons/tools/bin/.nobackup"; : > "$DIR/storage/sdcard/.nobackup"
 export SYNC_ROOT="$DIR/storage" SYNC_ADDON_DIR="$DIR/addon" SYNC_CONF_DIR="$DIR/conf" SYNC_RUN_DIR="$DIR/run" SYNC_RCLONE="$RCLONE"
 go build -o build/fakesystem ./cmd/fakesystem
 go build -o build/lite-sync-dev ./cmd/lite-sync

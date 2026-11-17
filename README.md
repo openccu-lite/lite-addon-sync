@@ -40,7 +40,8 @@ die Sie zusätzlich woanders haben möchten: die Datenbank eines Addons, Exporte
 
 - **Quelle:** ein Ordner unter `/usr/local`, gewählt in einer Ordnerauswahl. **Nie kopiert** und nie angeboten: die
   Einstellungen des Systems und aller Addons (`/usr/local/etc`, mit ihren Schlüsseln und Passwörtern – sie verlassen
-  das System in seiner Sicherung, verschlüsselt), Sicherungen des Systems, temporäre Dateien, Programmdateien.
+  das System in seiner Sicherung, verschlüsselt), Sicherungen des Systems, temporäre Dateien, die Programmdateien der
+  Addons.
   Dateien, die wie Schlüssel und Tokens aussehen (`*.pem`, `*.key`, `id_*`, `*token*` …), bleiben standardmäßig aus.
   Die Daten eines anderen Addons lassen sich wählen; der Auftrag liest sie dann mit den Rechten jenes Addons, und der
   Dialog sagt, was das öffnet.
@@ -56,6 +57,10 @@ die Sie zusätzlich woanders haben möchten: die Datenbank eines Addons, Exporte
   Ein dort bearbeiteter Timer erscheint hier als *benutzerdefiniert* und bleibt unangetastet, bis Sie ihn ersetzen.
 - **Verlauf:** jeder Lauf mit dem, was er kopiert, ersetzt und gelöscht hat, seinen Fehlern und seiner Dateiliste;
   die Läufe stehen auch im Protokoll des Systems unter der Unit des Auftrags.
+
+![Kopieraufträge](docs/screenshots/04-kopierauftraege.png)
+
+![Auftrag](docs/screenshots/05-auftrag.png)
 
 ## Anmelden bei OneDrive, Google Drive, Dropbox
 

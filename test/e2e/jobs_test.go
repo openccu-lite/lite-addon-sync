@@ -69,7 +69,6 @@ func newJobFixture(t *testing.T, confDir string) *jobFixture {
 	writeTree(t, f.source, tree{
 		"a.txt": "alpha", "sub dir/b.txt": "beta", "sub dir/deep/c.bin": strings.Repeat("c", 70000),
 		"cache/x.tmp": "tmp", "server.pem": "KEY", "my-token.json": "TOKEN", "old/ccu-2026.sbk": "BACKUP", "old/keep.txt": "no",
-		"tool/.nobackup": "", "tool/program": "ELF",
 	})
 	if f.store, err = jobs.Open(confDir); err != nil {
 		t.Fatal(err)
@@ -111,8 +110,7 @@ func (f *jobFixture) scenario(t *testing.T, tg jobs.Target, target string, tool 
 		t.Errorf("the dry run's list: %+v", lines)
 	}
 
-	// the run: what is data arrives; the cache, the key, the token, the backup's folder and the
-	// program files do not. The request is gone: this one is the timer's
+	// the run: what is data arrives; the cache, the key, the token and the backup's folder do not. The request is gone: this one is the timer's
 	rec, err = jobs.Run(ctx, f.env, j.ID)
 	if err != nil || rec.DryRun || rec.Trigger != "timer" || rec.Result != jobs.ResultOK || rec.Copied != 3 || rec.Deleted != 0 || rec.Bytes < 70000 {
 		t.Fatalf("run: %+v %v", rec, err)

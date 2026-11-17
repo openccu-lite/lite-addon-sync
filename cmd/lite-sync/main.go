@@ -53,7 +53,8 @@ func envOr(name, def string) string {
 }
 
 // runJob is `lite-sync run <job>`: one run of a copy job, as the job's unit on the system starts
-// it. It exits 0 only when the run succeeded, so a failed run is a failed unit.
+// it. It exits 0 when the run succeeded or was stopped, so a failed run is a failed unit and a
+// stopped one is not.
 func runJob(id string) int {
 	logf := func(format string, args ...any) { log.Printf("sync: "+format, args...) }
 	jobs.Root = envOr("SYNC_ROOT", jobs.Root)
@@ -64,8 +65,12 @@ func runJob(id string) int {
 	rc := &rclone.Runner{Bin: envOr("SYNC_RCLONE", filepath.Join(addonDir, "bin", "rclone")), Config: filepath.Join(confDir, "rclone.conf"), Home: home, Log: nil}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	_, err := jobs.Run(ctx, jobs.Env{AddonDir: addonDir, ConfDir: confDir, RunDir: envOr("SYNC_RUN_DIR", jobs.DefaultRunDir()), Rclone: rc, Log: logf}, id)
+	rec, err := jobs.Run(ctx, jobs.Env{AddonDir: addonDir, ConfDir: confDir, RunDir: envOr("SYNC_RUN_DIR", jobs.DefaultRunDir()), Rclone: rc, Log: logf}, id)
 	os.Stdout.Sync()
+	// a run somebody stopped did not fail: its unit is not a failed unit (the record says "stopped")
+	if rec.Result == jobs.ResultStopped {
+		return 0
+	}
 	if err != nil {
 		logf("%v", err)
 		return 1
