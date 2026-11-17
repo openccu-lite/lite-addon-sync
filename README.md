@@ -58,6 +58,10 @@ die Sie zusätzlich woanders haben möchten: die Datenbank eines Addons, Exporte
 - **Versionen:** Auf Wunsch bleibt erhalten, was ein Lauf auf dem Ziel ersetzt oder löscht: Es kommt in den Ordner
   `.versions` im Ordner des Auftrags, ein Ordner pro Lauf, und wird nach der eingestellten Zahl von Tagen wieder
   entfernt (oder nie).
+- **Was als geändert gilt:** Eine Datei wird erneut kopiert, wenn sich ihre Größe oder ihr Änderungszeitpunkt
+  unterscheidet. Ein einfacher WebDAV-Server (Anbieter „Anderer WebDAV-Server“) merkt sich keinen Änderungszeitpunkt:
+  dort fällt eine Änderung, die die Größe nicht ändert, nicht auf. Nextcloud, die Cloud-Anbieter, S3 und SSH-Server
+  haben diese Grenze nicht.
 - **Verschlüsselt:** Ein Auftrag in ein Konto kann seine Kopien verschlüsseln – Inhalte, Datei- und Ordnernamen
   (rclone crypt). Das System erzeugt das Passwort und zeigt es einmal an, wenn der Auftrag angelegt wird; ohne dieses
   Passwort liest niemand die Kopien. Es liegt außerdem in den Einstellungen des Addons, so wie rclone es ablegt
