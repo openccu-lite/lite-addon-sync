@@ -274,6 +274,10 @@ func List(p string, readable func(addon string) bool) (Listing, error) {
 	return l, nil
 }
 
+// VersionsDir is the folder on the target, inside the job's folder, that holds what runs replaced
+// and deleted: one folder per run, named by the run's time.
+const VersionsDir = ".versions"
+
 // NameFilterPatterns are the default filters a job starts with and the user can switch off: files
 // that look like keys, tokens and passwords.
 var NameFilterPatterns = []string{"*.pem", "*.key", "id_*", ".ssh/", "*token*", "*secret*", "*.age"}
@@ -293,6 +297,10 @@ func Excludes(j Job, source string) []string {
 		out = append(out, NameFilterPatterns...)
 	}
 	out = append(out, j.Excludes...)
+	if j.Versions {
+		// the versions' folder on the target is no part of the copy: never sent, never deleted
+		out = append(out, "/"+VersionsDir+"/")
+	}
 	seen := 0
 	_ = filepath.WalkDir(source, func(p string, d os.DirEntry, err error) error {
 		if err != nil {

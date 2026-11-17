@@ -184,3 +184,96 @@ func (n *Notifier) call(ctx context.Context, method, id string, body any) error 
 	}
 	return fmt.Errorf("the system answered HTTP %d", res.StatusCode)
 }
+
+// Item is one notice of the addon on the system's Status page, by another reason than a login:
+// a copy job that is overdue.
+type Item struct {
+	// ID is the notice's id on the system ("overdue-<job>").
+	ID       string
+	Title    map[string]string
+	Text     map[string]string
+	Link     string
+	Severity string
+}
+
+// Items keeps a set of notices in step with what a source says is due now: what is new or changed
+// is posted, what is gone is cleared. It shares the Notifier's token and address.
+type Items struct {
+	N      *Notifier
+	Source func(ctx context.Context) ([]Item, bool)
+	// All lists every id a notice could have (one per job): at the first look the ones that are
+	// not due are cleared once, since an earlier life of the daemon may have posted them.
+	All    func() []string
+	posted map[string]string
+}
+
+// Once looks once. A source that cannot say (the system did not answer) changes nothing.
+func (it *Items) Once(ctx context.Context) {
+	list, ok := it.Source(ctx)
+	if !ok {
+		return
+	}
+	first := it.posted == nil
+	if first {
+		it.posted = map[string]string{}
+	}
+	now := map[string]bool{}
+	for _, item := range list {
+		now[item.ID] = true
+	}
+	if first && it.All != nil {
+		for _, id := range it.All() {
+			if !now[id] {
+				_ = it.N.call(ctx, http.MethodDelete, id, nil)
+			}
+		}
+	}
+	for _, item := range list {
+		key := item.Title["en"] + "|" + item.Text["en"]
+		if it.posted[item.ID] == key {
+			continue
+		}
+		sev := item.Severity
+		if sev == "" {
+			sev = "warning"
+		}
+		if err := it.N.call(ctx, http.MethodPut, item.ID, map[string]any{"severity": sev, "title": item.Title, "text": item.Text, "link": item.Link}); err != nil {
+			it.N.logf("the notice %s could not be posted: %v", item.ID, err)
+			continue
+		}
+		it.posted[item.ID] = key
+	}
+	for id := range it.posted {
+		if now[id] {
+			continue
+		}
+		if err := it.N.call(ctx, http.MethodDelete, id, nil); err != nil {
+			it.N.logf("a notice could not be cleared: %v", err)
+			continue
+		}
+		delete(it.posted, id)
+	}
+}
+
+// Clear clears one notice the daemon may have posted in an earlier life (a job that is deleted, or
+// that is known not to be due at the start).
+func (it *Items) Clear(ctx context.Context, id string) {
+	if it.posted != nil {
+		delete(it.posted, id)
+	}
+	_ = it.N.call(ctx, http.MethodDelete, id, nil)
+}
+
+// Run looks every interval until ctx ends.
+func (it *Items) Run(ctx context.Context, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		it.Once(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}

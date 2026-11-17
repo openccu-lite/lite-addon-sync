@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.0] - 2026-11-17
+
+- **Versions:** a copy job can keep what a run replaces or deletes on the target. The old files go into the folder
+  `.versions` inside the job's folder there, one folder per run, and are removed again after the number of days you
+  set (or never). With it a mirror job no longer loses what it deletes. Works with accounts and with SSH servers -
+  also with a server that allows nothing but rsync.
+- **An overdue job is said on the system's Status page:** a job with a schedule whose last run that worked is older
+  than twice its interval (three days for a timer edited on the Services page) gets a notice there, with the way to
+  the addon's history, until a run works again.
+
 ## [0.2.0] - 2026-11-17
 
 Copy jobs. For openccu-lite 2.0.0-beta.7 and newer (the first with timers an addon keeps itself).
@@ -26,8 +36,6 @@ Copy jobs. For openccu-lite 2.0.0-beta.7 and newer (the first with timers an add
 - **No more privilege:** a job runs as the addon's user in a unit the system writes (the scope `timers:addon`, not
   `system:write`); the addon hands over the schedule and nothing else.
 
-Not in it yet: keeping replaced and deleted files as versions, encryption of the copies on the target (rclone crypt),
-a notice for a job that is overdue.
 
 ## [0.1.0] - 2026-11-17
 

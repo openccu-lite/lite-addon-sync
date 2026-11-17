@@ -49,6 +49,10 @@ as well: an addon's database, exports, pictures.
 - **Schedule:** manual only, hourly, daily or weekly. Each job is a timer of the system (`local-sync-<job>`): the
   **Services** page shows it, runs it and edits its schedule in full. A timer edited there shows here as *custom*
   and is left alone until you replace it.
+- **Versions:** on request what a run replaces or deletes on the target is kept: it goes into the folder `.versions`
+  inside the job's folder, one folder per run, and is removed again after the number of days you set (or never).
+- **Overdue:** a job with a schedule whose last run that worked is older than twice its interval is said on the
+  system's Status page until a run works again.
 - **History:** every run with what it copied, replaced and deleted, its errors and its file list; the runs are also
   in the system log under the job's unit.
 
@@ -113,8 +117,7 @@ best a key that may read and write this bucket and nothing else. **WebDAV / Next
 
 ## Not in it yet
 
-Keeping replaced and deleted files as versions, encrypting the copies on the target (rclone crypt), a notice for a job
-that is overdue.
+Encrypting the copies on the target (rclone crypt).
 
 ## Developing
 

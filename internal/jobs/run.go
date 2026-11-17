@@ -299,6 +299,8 @@ type runLog struct {
 	cut   bool
 	rec   *Record
 	files int
+	// moved are the files rclone moved into a backup directory in this run (tools.go)
+	moved map[string]bool
 	log   func(format string, args ...any)
 }
 
@@ -485,6 +487,7 @@ func Run(ctx context.Context, env Env, jobID string) (Record, error) {
 	defer os.Remove(exFile)
 
 	var cmd *exec.Cmd
+	var prune func()
 	var parse func(line string, stderr bool)
 	var classify func(exit int, stderr string) string
 	switch job.Target.Kind {
@@ -540,8 +543,9 @@ func Run(ctx context.Context, env Env, jobID string) (Record, error) {
 			}
 			_ = os.RemoveAll(tree)
 		}
-		cmd = exec.CommandContext(ctx, bin, RsyncArgs(job, source, *srv, exFile, rec.DryRun)...)
+		cmd = exec.CommandContext(ctx, bin, RsyncArgs(job, source, *srv, exFile, rec.ID, rec.DryRun)...)
 		cmd.Env = rsyncEnv
+		prune = func() { pruneRsync(ctx, env, bin, rsyncEnv, job, *srv, logf) }
 		parse = func(line string, stderr bool) { parseRsync(line, stderr, rl, &rec, &prog) }
 		classify = rsyncResult
 	case TargetAccount:
@@ -553,7 +557,8 @@ func Run(ctx context.Context, env Env, jobID string) (Record, error) {
 			return finish(ResultFailed, "rclone is not there")
 		}
 		rec.Tool = "rclone"
-		cmd = env.Rclone.JobCommand(ctx, RcloneArgs(job, source, acc.Remote(), acc.Root, exFile, rec.DryRun)...)
+		cmd = env.Rclone.JobCommand(ctx, RcloneArgs(job, source, acc.Remote(), acc.Root, exFile, rec.ID, rec.DryRun)...)
+		prune = func() { pruneRclone(ctx, env.Rclone, job, acc, logf) }
 		parse = func(line string, stderr bool) { parseRclone(line, stderr, rl, &rec, &prog) }
 		classify = rcloneResult
 	default:
@@ -635,7 +640,65 @@ func Run(ctx context.Context, env Env, jobID string) (Record, error) {
 	emu.Lock()
 	text := errText.String()
 	emu.Unlock()
-	return finish(classify(rec.Exit, text), "")
+	result := classify(rec.Exit, text)
+	// the versions of runs that are too old go after a run that worked; a failure of that is a line
+	// in the journal, not the run's
+	if (result == ResultOK || result == ResultWarnings) && !rec.DryRun && job.Versions && job.VersionsDays > 0 && prune != nil {
+		prune()
+	}
+	return finish(result, "")
+}
+
+func pruneRclone(ctx context.Context, rc *rclone.Runner, job Job, acc accounts.Account, logf func(string, ...any)) {
+	base := rclone.Path(acc.Remote(), acc.Root, job.Target.Folder, VersionsDir)
+	dirs, err := rc.ListDirs(ctx, base)
+	if err != nil {
+		return // no versions yet
+	}
+	var names []string
+	for _, d := range dirs {
+		names = append(names, d.Name)
+	}
+	for _, old := range OldVersions(names, job.VersionsDays, time.Now()) {
+		if err := rc.Purge(ctx, base+"/"+old); err != nil {
+			logf("the versions of the run %s could not be removed: %v", old, err)
+			continue
+		}
+		logf("the versions of the run %s were removed (older than %d days)", old, job.VersionsDays)
+	}
+}
+
+func pruneRsync(ctx context.Context, env Env, bin string, rsyncEnv []string, job Job, srv servers.Server, logf func(string, ...any)) {
+	list := exec.CommandContext(ctx, bin, RsyncListArgs(job, srv)...)
+	list.Env = rsyncEnv
+	out, err := list.Output()
+	if err != nil {
+		return // no versions yet
+	}
+	var names []string
+	for _, l := range strings.Split(string(out), "\n") {
+		if f := strings.Fields(l); len(f) >= 5 && strings.HasPrefix(f[0], "d") {
+			names = append(names, f[len(f)-1])
+		}
+	}
+	old := OldVersions(names, job.VersionsDays, time.Now())
+	if len(old) == 0 {
+		return
+	}
+	empty, err := os.MkdirTemp(env.RunDir, "empty-")
+	if err != nil {
+		return
+	}
+	defer os.RemoveAll(empty)
+	for _, name := range old {
+		c := exec.CommandContext(ctx, bin, RsyncPruneArgs(job, srv, empty, name)...)
+		c.Env = rsyncEnv
+		if b, err := c.CombinedOutput(); err != nil {
+			logf("the versions of the run %s could not be removed: %v %s", name, err, clip(strings.TrimSpace(string(b)), 200))
+			continue
+		}
+		logf("the versions of the run %s were removed (older than %d days)", name, job.VersionsDays)
+	}
 }
 
 // scanLinesCR splits at \n and at \r: rsync rewrites its progress line with carriage returns.

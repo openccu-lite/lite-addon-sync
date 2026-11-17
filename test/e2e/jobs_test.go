@@ -158,6 +158,39 @@ func (f *jobFixture) scenario(t *testing.T, tg jobs.Target, target string, tool 
 	if got := listTree(t, target); got != "a.txt new.txt sub dir/deep/c.bin" {
 		t.Errorf("after the mirror run: %q", got)
 	}
+	// versions: what a run replaces or deletes is kept in the run's folder, and old runs' go
+	sp.Versions, sp.VersionsDays = true, 30
+	j, _ = f.store.Update(j.ID, sp)
+	_, _ = f.store.Set(j.ID, func(j *jobs.Job) { j.NeedsDryRun = false })
+	time.Sleep(1100 * time.Millisecond)
+	writeTree(t, f.source, tree{"a.txt": "alpha once more"})
+	_ = os.Remove(filepath.Join(f.source, "new.txt"))
+	writeTree(t, filepath.Join(target, ".versions"), tree{"20200101T000000Z/old.txt": "old", "notes/keep.txt": "not a run's folder"})
+	if rec, err = jobs.Run(ctx, f.env, j.ID); err != nil || rec.Replaced != 1 || rec.Deleted != 1 {
+		t.Fatalf("a run with versions: %+v %v", rec, err)
+	}
+	kept := filepath.Join(target, ".versions", rec.ID)
+	if b, _ := os.ReadFile(filepath.Join(kept, "a.txt")); string(b) != "alpha changed" {
+		t.Errorf("the replaced file's version: %q (%s)", b, listTree(t, filepath.Join(target, ".versions")))
+	}
+	if b, _ := os.ReadFile(filepath.Join(kept, "new.txt")); string(b) != "new" {
+		t.Errorf("the deleted file's version: %q", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join(target, "a.txt")); string(b) != "alpha once more" {
+		t.Errorf("the target's a.txt: %q", b)
+	}
+	if got := listTree(t, filepath.Join(target, ".versions")); strings.Contains(got, "20200101T000000Z") || !strings.Contains(got, "notes/keep.txt") {
+		t.Errorf("old versions: %q", got)
+	}
+	// the next run neither copies the versions back nor deletes them
+	if rec, err = jobs.Run(ctx, f.env, j.ID); err != nil || rec.Copied+rec.Replaced+rec.Deleted != 0 {
+		t.Errorf("a run after versions were kept: %+v %v", rec, err)
+	}
+	if _, err := os.Stat(filepath.Join(kept, "a.txt")); err != nil {
+		t.Errorf("the versions went with the next mirror run: %v", err)
+	}
+	sp.Versions, sp.VersionsDays = false, 0
+	_ = os.RemoveAll(filepath.Join(target, ".versions"))
 	// more deletions than allowed: the run stops
 	max := 1
 	sp.MaxDelete = &max

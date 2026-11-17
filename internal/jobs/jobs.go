@@ -63,6 +63,11 @@ type Job struct {
 	NameFilters bool `json:"name_filters"`
 	// BwLimit limits the transfer in KiB/s, 0 = none.
 	BwLimit int `json:"bwlimit_kbps"`
+	// Versions keeps what a run replaces or deletes on the target: it is moved into
+	// <folder>/.versions/<time of the run>/ instead of being lost. VersionsDays removes the versions
+	// of runs older than that many days after a run, 0 = they are kept until somebody removes them.
+	Versions     bool `json:"versions"`
+	VersionsDays int  `json:"versions_days"`
 	// Schedule is what the job dialog chose last; the timer on the system is the truth.
 	Schedule Schedule `json:"schedule"`
 	// TimerHash is the SHA-256 of the timer text the addon wrote last: a different text on the
@@ -78,16 +83,18 @@ type Job struct {
 
 // Spec is what the job dialog sends.
 type Spec struct {
-	Name        string   `json:"name"`
-	Source      string   `json:"source"`
-	ReadAddon   string   `json:"read_addon"`
-	Target      Target   `json:"target"`
-	Mode        string   `json:"mode"`
-	MaxDelete   *int     `json:"max_delete"`
-	Excludes    []string `json:"excludes"`
-	NameFilters *bool    `json:"name_filters"`
-	BwLimit     int      `json:"bwlimit_kbps"`
-	Schedule    Schedule `json:"schedule"`
+	Name         string   `json:"name"`
+	Source       string   `json:"source"`
+	ReadAddon    string   `json:"read_addon"`
+	Target       Target   `json:"target"`
+	Mode         string   `json:"mode"`
+	MaxDelete    *int     `json:"max_delete"`
+	Excludes     []string `json:"excludes"`
+	NameFilters  *bool    `json:"name_filters"`
+	BwLimit      int      `json:"bwlimit_kbps"`
+	Versions     bool     `json:"versions"`
+	VersionsDays int      `json:"versions_days"`
+	Schedule     Schedule `json:"schedule"`
 }
 
 // ValidationError is a field the user must correct.
@@ -224,6 +231,13 @@ func (j *Job) apply(sp Spec) (changed bool, err error) {
 	if err := sp.Schedule.check(); err != nil {
 		return false, err
 	}
+	if sp.VersionsDays < 0 || sp.VersionsDays > 3650 {
+		return false, invalid("versions_days: 0 to 3650")
+	}
+	if !sp.Versions {
+		sp.VersionsDays = 0
+	}
+	j.Versions, j.VersionsDays = sp.Versions, sp.VersionsDays
 	changed = j.Source != src || j.Target != sp.Target || j.Mode != sp.Mode || j.ReadAddon != sp.ReadAddon
 	j.Name, j.Source, j.ReadAddon, j.Target, j.Mode, j.MaxDelete, j.Excludes, j.BwLimit = sp.Name, src, sp.ReadAddon, sp.Target, sp.Mode, maxDelete, ex, sp.BwLimit
 	j.NameFilters = sp.NameFilters == nil || *sp.NameFilters

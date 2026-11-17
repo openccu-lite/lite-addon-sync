@@ -72,6 +72,7 @@
             excludes: patternsOf(excludes),
             max_delete: Math.max(0, Math.floor(Number(spec.max_delete) || 0)),
             bwlimit_kbps: Math.max(0, Math.floor(Number(spec.bwlimit_kbps) || 0)),
+            versions_days: spec.versions ? Math.max(0, Math.floor(Number(spec.versions_days) || 0)) : 0,
             schedule: {kind: spec.schedule.kind, time: spec.schedule.time, weekday: spec.schedule.weekday},
             ...(replace ? {replace_custom: true} : {}),
         };
@@ -166,6 +167,13 @@
                 <label class="sy-label" for="sy-job-maxdel">{t('At most deletions per run')}</label>
                 <input id="sy-job-maxdel" type="number" class="hmm-input" min="0" max="1000000" bind:value={spec.max_delete} data-testid="job-maxdelete" />
                 <p class="sy-help sy-span">{t('A run that would delete more stops and says so. 0 = no limit.')}</p>
+            {/if}
+
+            <label class="sy-check sy-span"><input type="checkbox" bind:checked={spec.versions} data-testid="job-versions" /> {t('Keep what a run replaces or deletes on the target')}</label>
+            {#if spec.versions}
+                <label class="sy-label" for="sy-job-vdays">{t('Remove versions after days')}</label>
+                <input id="sy-job-vdays" type="number" class="hmm-input" min="0" max="3650" bind:value={spec.versions_days} data-testid="job-versions-days" />
+                <p class="sy-help sy-span">{t('The old files go into the folder .versions inside the folder on the target, one folder per run. 0 = they are never removed.')}</p>
             {/if}
 
             <label class="sy-label" for="sy-job-excludes">{t('Leave out')}</label>

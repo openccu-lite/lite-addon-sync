@@ -572,3 +572,12 @@ func (r *Runner) JobCommand(ctx context.Context, args ...string) *exec.Cmd {
 	c.WaitDelay = 10 * time.Second
 	return c
 }
+
+// Purge removes a folder with everything in it; one that is not there is no error.
+func (r *Runner) Purge(ctx context.Context, path string) error {
+	_, err := r.run(ctx, nil, "purge", path)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	return err
+}

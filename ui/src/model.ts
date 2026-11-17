@@ -117,7 +117,7 @@ export interface Run {
 export interface Progress { run: string; started: string; dry_run: boolean; waiting?: boolean; files: number; bytes: number; percent: number; speed?: string; eta?: string }
 export interface Job {
     id: string; name: string; source: string; read_addon?: string; target: JobTarget; mode: string; max_delete: number; excludes: string[];
-    name_filters: boolean; bwlimit_kbps: number; schedule: Schedule; needs_dry_run?: boolean;
+    name_filters: boolean; bwlimit_kbps: number; versions?: boolean; versions_days?: number; schedule: Schedule; needs_dry_run?: boolean;
     timer: {unit: string; exists: boolean; enabled: boolean; next?: string; last?: string};
     target_name: string; target_gone?: boolean; last?: Run; running?: Progress;
 }
@@ -126,7 +126,7 @@ export interface Folder { name: string; path: string; state: string; why?: strin
 export interface Listing { path: string; parent: string; self: Folder; folders: Folder[] }
 export interface JobSpec {
     name: string; source: string; read_addon: string; target: JobTarget; mode: string; max_delete: number; excludes: string[];
-    name_filters: boolean; bwlimit_kbps: number; schedule: Schedule; replace_custom?: boolean;
+    name_filters: boolean; bwlimit_kbps: number; versions: boolean; versions_days: number; schedule: Schedule; replace_custom?: boolean;
 }
 
 /** a server's pill by state; every pill reserves the widest */
@@ -185,11 +185,11 @@ export function scheduleWords(s: Schedule): {key: string; values?: Record<string
 /** the job dialog's start: a job's spec, or an empty one */
 export function specOf(j?: Job): JobSpec {
     if (!j) {
-        return {name: '', source: '', read_addon: '', target: {kind: 'account', id: '', folder: ''}, mode: 'copy', max_delete: 50, excludes: [], name_filters: true, bwlimit_kbps: 0, schedule: {kind: 'manual', time: '03:00', weekday: 'Mon'}};
+        return {name: '', source: '', read_addon: '', target: {kind: 'account', id: '', folder: ''}, mode: 'copy', max_delete: 50, excludes: [], name_filters: true, bwlimit_kbps: 0, versions: false, versions_days: 30, schedule: {kind: 'manual', time: '03:00', weekday: 'Mon'}};
     }
     return {
         name: j.name, source: j.source, read_addon: j.read_addon ?? '', target: {...j.target}, mode: j.mode, max_delete: j.max_delete, excludes: [...(j.excludes ?? [])],
-        name_filters: j.name_filters, bwlimit_kbps: j.bwlimit_kbps, schedule: {kind: j.schedule.kind, time: j.schedule.time ?? '03:00', weekday: j.schedule.weekday ?? 'Mon', calendar: j.schedule.calendar},
+        name_filters: j.name_filters, bwlimit_kbps: j.bwlimit_kbps, versions: !!j.versions, versions_days: j.versions ? (j.versions_days ?? 0) : 30, schedule: {kind: j.schedule.kind, time: j.schedule.time ?? '03:00', weekday: j.schedule.weekday ?? 'Mon', calendar: j.schedule.calendar},
     };
 }
 

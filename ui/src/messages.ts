@@ -277,6 +277,11 @@ const DE: Record<string, string> = {
     'program files, not data': 'Programmdateien, keine Daten',
     'this addon\'s own files': 'die eigenen Dateien dieses Addons',
     'choose a folder inside': 'wählen Sie einen Ordner darin',
+    'Keep what a run replaces or deletes on the target': 'Aufbewahren, was ein Lauf auf dem Ziel ersetzt oder löscht',
+    'Remove versions after days': 'Versionen entfernen nach Tagen',
+    'The old files go into the folder .versions inside the folder on the target, one folder per run. 0 = they are never removed.': 'Die alten Dateien kommen in den Ordner .versions im Ordner auf dem Ziel, ein Ordner pro Lauf. 0 = sie werden nie entfernt.',
+    'What a run replaces or deletes is kept in the folder .versions on the target.': 'Was ein Lauf ersetzt oder löscht, wird im Ordner .versions auf dem Ziel aufbewahrt.',
+    'versions': 'Versionen',
 };
 
 export const MESSAGES: Catalogue = Object.fromEntries(Object.entries(DE).map(([en, de]) => [en, {de, en}]));

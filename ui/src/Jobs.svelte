@@ -91,7 +91,7 @@
                     {#each copy.jobs as j (j.id)}
                         {@const p = pill(j)}
                         <tr data-testid="job" data-job={j.id}>
-                            <td class="sy-cell-name" title={j.name}>{j.name}{#if j.mode === 'mirror'}{' '}<span class="sy-badge" title={t('Mirror: files that are gone from the source are deleted on the target.')}>{t('mirror')}</span>{/if}</td>
+                            <td class="sy-cell-name" title={j.name}>{j.name}{#if j.mode === 'mirror'}{' '}<span class="sy-badge" title={t('Mirror: files that are gone from the source are deleted on the target.')}>{t('mirror')}</span>{/if}{#if j.versions}{' '}<span class="sy-badge" title={t('What a run replaces or deletes is kept in the folder .versions on the target.')}>{t('versions')}</span>{/if}</td>
                             <td class="sy-cell-path" title={`${j.source} → ${j.target_name}: ${j.target.folder}`}>
                                 <span class="sy-mono">{j.source.replace(copy.root + '/', '')}</span> → {#if j.target_gone}<span class="sy-error-inline">{t('target missing')}</span>{:else}{j.target_name}: <span class="sy-mono">{j.target.folder}</span>{/if}
                             </td>

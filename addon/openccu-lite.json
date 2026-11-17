@@ -6,7 +6,7 @@
     "de": "Cloud-Speicher als Sicherungsziel, und Kopieraufträge für Ordner des Systems: Verbinden Sie ein Konto bei OneDrive, Google Drive oder Dropbox, einen S3-Bucket oder einen WebDAV-Server (Nextcloud) und wählen Sie es auf der Seite Sicherung als Ziel – neben USB-Stick, Netzwerkfreigabe und SSH-Server, mit demselben Zeitplan, derselben Aufbewahrung und der Wiederherstellung von dort. Sicherungen verlassen das System nur verschlüsselt. Kopieraufträge kopieren einen Ordner des Systems nach Zeitplan in ein Konto (mit rclone, das mit dem Addon kommt) oder auf einen SSH-Server (mit rsync).",
     "en": "Cloud storage as a backup target, and copy jobs for folders of the system: connect an account at OneDrive, Google Drive or Dropbox, an S3 bucket or a WebDAV server (Nextcloud) and choose it as a target on the Backup page - beside the USB stick, the network share and the SSH server, with the same schedule, the same retention and the restore from there. Backups leave the system encrypted only. Copy jobs copy a folder of the system on a schedule to an account (with rclone, which comes with the addon) or to an SSH server (with rsync)."
   },
-  "version": "0.2.0",
+  "version": "0.3.0",
   "homepage": "https://github.com/openccu-lite/lite-addon-sync",
   "licence": "MIT",
   "changelog": "https://github.com/openccu-lite/lite-addon-sync/blob/main/CHANGELOG.md",

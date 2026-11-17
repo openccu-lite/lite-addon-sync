@@ -55,6 +55,11 @@ die Sie zusätzlich woanders haben möchten: die Datenbank eines Addons, Exporte
 - **Zeitplan:** nur manuell, stündlich, täglich oder wöchentlich. Jeder Auftrag ist ein Timer des Systems
   (`local-sync-<auftrag>`): Die Seite **Dienste** zeigt ihn, startet ihn und bearbeitet seinen Zeitplan vollständig.
   Ein dort bearbeiteter Timer erscheint hier als *benutzerdefiniert* und bleibt unangetastet, bis Sie ihn ersetzen.
+- **Versionen:** Auf Wunsch bleibt erhalten, was ein Lauf auf dem Ziel ersetzt oder löscht: Es kommt in den Ordner
+  `.versions` im Ordner des Auftrags, ein Ordner pro Lauf, und wird nach der eingestellten Zahl von Tagen wieder
+  entfernt (oder nie).
+- **Überfällig:** Ein Auftrag mit Zeitplan, dessen letzter erfolgreicher Lauf länger her ist als das Doppelte seines
+  Abstands, steht als Hinweis auf der Seite Status des Systems, bis wieder ein Lauf gelingt.
 - **Verlauf:** jeder Lauf mit dem, was er kopiert, ersetzt und gelöscht hat, seinen Fehlern und seiner Dateiliste;
   die Läufe stehen auch im Protokoll des Systems unter der Unit des Auftrags.
 
@@ -119,8 +124,7 @@ Adresse (`https://…/remote.php/dav/files/<name>`), Benutzer und ein **App-Pass
 
 ## Noch nicht enthalten
 
-Ersetzte und gelöschte Dateien als Versionen aufbewahren, die Kopien auf dem Ziel verschlüsseln (rclone crypt), ein
-Hinweis bei einem überfälligen Auftrag.
+Die Kopien auf dem Ziel verschlüsseln (rclone crypt).
 
 ## Entwickeln
 

@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/openccu-lite/lite-addon-sync/internal/rclone"
 	"github.com/openccu-lite/lite-addon-sync/internal/servers"
@@ -16,7 +17,7 @@ import (
 // absolute path, a remote's name is the addon's own, and a folder never starts with a dash.
 
 // RsyncArgs are rsync's arguments for a run; the remote shell is in RSYNC_RSH.
-func RsyncArgs(j Job, source string, srv servers.Server, excludeFile string, dryRun bool) []string {
+func RsyncArgs(j Job, source string, srv servers.Server, excludeFile, stamp string, dryRun bool) []string {
 	args := []string{"-rlt", "-s", "--out-format=%i %n", "--info=progress2", "--stats", "--timeout=120", "--exclude-from=" + excludeFile}
 	if j.Mode == ModeMirror {
 		args = append(args, "--delete")
@@ -26,6 +27,10 @@ func RsyncArgs(j Job, source string, srv servers.Server, excludeFile string, dry
 	}
 	if j.BwLimit > 0 {
 		args = append(args, "--bwlimit="+strconv.Itoa(j.BwLimit))
+	}
+	if j.Versions {
+		// relative to the destination: what is replaced or deleted goes there instead
+		args = append(args, "--backup", "--backup-dir="+VersionsDir+"/"+stamp)
 	}
 	if dryRun {
 		args = append(args, "--dry-run")
@@ -41,8 +46,38 @@ func RsyncMkdirArgs(tree string, srv servers.Server) []string {
 	return []string{"-r", "-s", "--timeout=60", "--", strings.TrimRight(tree, "/") + "/", servers.Dest(srv, "")}
 }
 
+// RsyncListArgs lists the folders of runs in the versions' folder on a server.
+func RsyncListArgs(j Job, srv servers.Server) []string {
+	return []string{"--list-only", "-s", "--timeout=60", "--", servers.Dest(srv, j.Target.Folder+"/"+VersionsDir)}
+}
+
+// RsyncPruneArgs removes one run's folder from the versions' folder on a server, with rsync alone
+// (a server that allows nothing but rsync takes it): an empty local directory is mirrored onto the
+// versions' folder with only that run's folder inside the transfer.
+func RsyncPruneArgs(j Job, srv servers.Server, empty, stamp string) []string {
+	return []string{"-r", "-s", "--timeout=120", "--delete", "--include=/" + stamp + "/***", "--exclude=*", "--", strings.TrimRight(empty, "/") + "/", servers.Dest(srv, j.Target.Folder+"/"+VersionsDir)}
+}
+
+// OldVersions picks, out of the names in a versions' folder, the runs older than days: names of
+// the runs' time format alone, so nothing else that lies there is ever removed.
+func OldVersions(names []string, days int, now time.Time) []string {
+	if days <= 0 {
+		return nil
+	}
+	limit := now.UTC().AddDate(0, 0, -days)
+	var out []string
+	for _, n := range names {
+		n = strings.TrimSuffix(n, "/")
+		t, err := time.Parse(runTimeLayout, n)
+		if err == nil && t.Before(limit) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 // RcloneArgs are rclone's arguments for a run (after Runner.JobCommand's own).
-func RcloneArgs(j Job, source, remote, root, excludeFile string, dryRun bool) []string {
+func RcloneArgs(j Job, source, remote, root, excludeFile, stamp string, dryRun bool) []string {
 	verb := "copy"
 	if j.Mode == ModeMirror {
 		verb = "sync"
@@ -53,6 +88,9 @@ func RcloneArgs(j Job, source, remote, root, excludeFile string, dryRun bool) []
 	}
 	if j.BwLimit > 0 {
 		args = append(args, "--bwlimit", strconv.Itoa(j.BwLimit)+"k")
+	}
+	if j.Versions {
+		args = append(args, "--backup-dir", rclone.Path(remote, root, j.Target.Folder, VersionsDir, stamp))
 	}
 	if dryRun {
 		args = append(args, "--dry-run")
@@ -185,6 +223,24 @@ func parseRclone(line string, stderr bool, rl *runLog, rec *Record, prog *Progre
 		return
 	}
 	msg := strings.ToLower(l.Msg)
+	// with a backup directory (versions) a file that is replaced is first moved away and then
+	// copied as if it were new, and a deleted one is "moved into backup dir"
+	if l.Object != "" && (strings.HasPrefix(msg, "moved into backup dir") || strings.HasPrefix(msg, "skipped move into backup dir")) {
+		rl.add("D", l.Object)
+		return
+	}
+	if l.Object != "" && (strings.HasPrefix(msg, "moved") || strings.HasPrefix(msg, "skipped move")) {
+		rl.mu.Lock()
+		if rl.moved == nil {
+			rl.moved = map[string]bool{}
+		}
+		rl.moved[l.Object] = true
+		rl.mu.Unlock()
+		return
+	}
+	rl.mu.Lock()
+	wasMoved := rl.moved[l.Object]
+	rl.mu.Unlock()
 	switch {
 	case l.Level == "error" || l.Level == "critical" || l.Level == "fatal":
 		// "Attempt 1/1 failed with 2 errors and: …" repeats the errors above it
@@ -197,7 +253,7 @@ func parseRclone(line string, stderr bool, rl *runLog, rec *Record, prog *Progre
 		}
 		rl.add("E", text)
 	case l.Object == "":
-	case strings.HasPrefix(msg, "copied (replaced"):
+	case strings.HasPrefix(msg, "copied (replaced"), wasMoved && (strings.HasPrefix(msg, "copied") || strings.HasPrefix(msg, "skipped copy as --dry-run")):
 		rl.add("R", l.Object)
 	case strings.HasPrefix(msg, "copied"), strings.HasPrefix(msg, "skipped copy as --dry-run"), strings.HasPrefix(msg, "multi-thread copied"):
 		rl.add("C", l.Object)

@@ -181,8 +181,9 @@ func run(o options) error {
 	}
 
 	// a login that is about to lapse is said on the system's Status page (an addon notice)
+	var nt *notices.Notifier
 	if o.noticesURL != "" && !o.noSession {
-		nt := &notices.Notifier{Base: o.noticesURL, TokenFile: filepath.Join(notices.ControlTokenDir, o.id), AddonID: o.id, Accounts: store.List, Log: logf}
+		nt = &notices.Notifier{Base: o.noticesURL, TokenFile: filepath.Join(notices.ControlTokenDir, o.id), AddonID: o.id, Accounts: store.List, Log: logf}
 		go func() {
 			select {
 			case <-ctx.Done():
@@ -213,6 +214,52 @@ func run(o options) error {
 	}
 	_ = os.MkdirAll(o.runDir, 0o700)
 	timers := &systimers.Client{Base: o.base, HTTP: &http.Client{Transport: &addonkit.AuthTransport{Source: token}, Timeout: 90 * time.Second}}
+	// a copy job whose last good run is too long ago is said on the Status page as well
+	if nt != nil {
+		overdue := &notices.Items{N: nt, Source: func(ctx context.Context) ([]notices.Item, bool) {
+			list, _, err := timers.List(ctx)
+			if err != nil {
+				return nil, false
+			}
+			byName := map[string]systimers.Timer{}
+			for _, t := range list {
+				byName[t.Name] = t
+			}
+			var items []notices.Item
+			for _, j := range jobStore.List() {
+				t, ok := byName[j.ID]
+				if !ok {
+					continue
+				}
+				since, late := jobs.Overdue(j, jobs.ReadTimer(j.ID, t.TimerFile, t.Enabled), jobs.History(o.addonDir, j.ID), time.Now())
+				if !late {
+					continue
+				}
+				day := since.Local().Format("2006-01-02")
+				items = append(items, notices.Item{ID: "overdue-" + j.ID, Link: "/addon-settings/" + o.id + "#jobs",
+					Title: map[string]string{"de": fmt.Sprintf("Der Kopierauftrag „%s“ ist überfällig", j.Name), "en": fmt.Sprintf("The copy job \"%s\" is overdue", j.Name)},
+					Text: map[string]string{
+						"de": fmt.Sprintf("Sein letzter erfolgreicher Lauf war am %s. Der Verlauf des Addons zeigt, woran die Läufe seitdem gescheitert sind.", day),
+						"en": fmt.Sprintf("Its last run that worked was on %s. The addon's history shows why the runs since then failed.", day),
+					}})
+			}
+			return items, true
+		}, All: func() []string {
+			var ids []string
+			for _, j := range jobStore.List() {
+				ids = append(ids, "overdue-"+j.ID)
+			}
+			return ids
+		}}
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(2 * time.Minute):
+			}
+			overdue.Run(ctx, 30*time.Minute)
+		}()
+	}
 
 	wrap := func(h http.Handler) http.Handler { return h }
 	if !o.noSession {

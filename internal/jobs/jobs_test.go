@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/openccu-lite/lite-addon-sync/internal/servers"
 )
@@ -331,16 +332,28 @@ func TestScheduleAndTimerText(t *testing.T) {
 func TestToolArguments(t *testing.T) {
 	j := Job{ID: "x", Mode: ModeMirror, MaxDelete: 50, BwLimit: 512, Target: Target{Kind: TargetServer, ID: "s", Folder: "my photos/2026"}}
 	srv := servers.Server{ID: "abcdefghij", Host: "nas.example.org", Port: 2222, User: "backup", Path: "/volume1/ccu/"}
-	args := RsyncArgs(j, "/usr/local/sdcard/door bell/", srv, "/run/addon-sync/ex.txt", true)
+	args := RsyncArgs(j, "/usr/local/sdcard/door bell/", srv, "/run/addon-sync/ex.txt", "20261117T030000Z", true)
 	want := "-rlt|-s|--out-format=%i %n|--info=progress2|--stats|--timeout=120|--exclude-from=/run/addon-sync/ex.txt|--delete|--max-delete=50|--bwlimit=512|--dry-run|--|/usr/local/sdcard/door bell/|backup@nas.example.org:/volume1/ccu/my photos/2026/"
 	if got := strings.Join(args, "|"); got != want {
 		t.Errorf("rsync:\n%s\nwant\n%s", got, want)
 	}
 	j.Mode, j.BwLimit = ModeCopy, 0
-	if got := strings.Join(RsyncArgs(j, "/usr/local/x", srv, "/e", false), "|"); strings.Contains(got, "--delete") || strings.Contains(got, "--dry-run") || strings.Contains(got, "bwlimit") {
+	if got := strings.Join(RsyncArgs(j, "/usr/local/x", srv, "/e", "s", false), "|"); strings.Contains(got, "--delete") || strings.Contains(got, "--dry-run") || strings.Contains(got, "bwlimit") || strings.Contains(got, "--backup") {
 		t.Errorf("a copy run: %s", got)
 	}
-	for _, a := range RsyncArgs(j, "/usr/local/x", srv, "/e", false) {
+	// versions: what is replaced or deleted goes into the run's folder below the destination
+	j.Versions = true
+	if got := strings.Join(RsyncArgs(j, "/usr/local/x", srv, "/e", "20261117T030000Z", false), "|"); !strings.Contains(got, "|--backup|--backup-dir=.versions/20261117T030000Z|--|") {
+		t.Errorf("rsync with versions: %s", got)
+	}
+	if got := strings.Join(RsyncListArgs(j, srv), "|"); got != "--list-only|-s|--timeout=60|--|backup@nas.example.org:/volume1/ccu/my photos/2026/.versions/" {
+		t.Errorf("list: %s", got)
+	}
+	if got := strings.Join(RsyncPruneArgs(j, srv, "/run/e", "20260101T030000Z"), "|"); got != "-r|-s|--timeout=120|--delete|--include=/20260101T030000Z/***|--exclude=*|--|/run/e/|backup@nas.example.org:/volume1/ccu/my photos/2026/.versions/" {
+		t.Errorf("prune: %s", got)
+	}
+	j.Versions = false
+	for _, a := range RsyncArgs(j, "/usr/local/x", srv, "/e", "s", false) {
 		if a == "-e" || strings.HasPrefix(a, "--rsh") || strings.HasPrefix(a, "--rsync-path") || strings.HasPrefix(a, "--files-from") {
 			t.Errorf("rsync gets %q", a)
 		}
@@ -353,13 +366,29 @@ func TestToolArguments(t *testing.T) {
 	}
 
 	j = Job{ID: "x", Mode: ModeMirror, MaxDelete: 50, BwLimit: 512, Target: Target{Kind: TargetAccount, ID: "a", Folder: "db/history"}}
-	got := strings.Join(RcloneArgs(j, "/usr/local/addons/history/var", "acc-aone000001", "my-bucket", "/e", true), "|")
+	got := strings.Join(RcloneArgs(j, "/usr/local/addons/history/var", "acc-aone000001", "my-bucket", "/e", "s", true), "|")
 	if got != "sync|--exclude-from|/e|--skip-links|--max-delete|50|--bwlimit|512k|--dry-run|/usr/local/addons/history/var|acc-aone000001:my-bucket/db/history" {
 		t.Errorf("rclone: %s", got)
 	}
 	j.Mode = ModeCopy
-	if got := strings.Join(RcloneArgs(j, "/usr/local/x", "acc-a", "", "/e", false), "|"); got != "copy|--exclude-from|/e|--skip-links|--bwlimit|512k|/usr/local/x|acc-a:db/history" {
+	if got := strings.Join(RcloneArgs(j, "/usr/local/x", "acc-a", "", "/e", "s", false), "|"); got != "copy|--exclude-from|/e|--skip-links|--bwlimit|512k|/usr/local/x|acc-a:db/history" {
 		t.Errorf("rclone copy: %s", got)
+	}
+	j.Versions = true
+	if got := strings.Join(RcloneArgs(j, "/usr/local/x", "acc-a", "bucket", "/e", "20261117T030000Z", false), "|"); got != "copy|--exclude-from|/e|--skip-links|--bwlimit|512k|--backup-dir|acc-a:bucket/db/history/.versions/20261117T030000Z|/usr/local/x|acc-a:bucket/db/history" {
+		t.Errorf("rclone with versions: %s", got)
+	}
+	if ex := strings.Join(Excludes(j, t.TempDir()), "\n"); !strings.Contains(ex, "\n/.versions/") {
+		t.Errorf("the versions' folder is not left out of the copy:\n%s", ex)
+	}
+	// only folders named as a run's time, and only the old ones, are ever removed
+	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	old := OldVersions([]string{"20261001T030000Z", "20261110T030000Z/", "20261117T030000Z", "20250101T000000Z", "photos", "..", "20261001", "."}, 30, now)
+	if strings.Join(old, ",") != "20261001T030000Z,20250101T000000Z" {
+		t.Errorf("old versions: %v", old)
+	}
+	if OldVersions([]string{"20200101T000000Z"}, 0, now) != nil {
+		t.Error("0 days removes versions")
 	}
 }
 
@@ -422,13 +451,19 @@ func TestParseRclone(t *testing.T) {
 		`{"level":"notice","msg":"\nTransferred: ...","stats":{"bytes":2048,"totalBytes":4096,"speed":1048576,"eta":3,"errors":1},"time":"x"}`,
 		`{"level":"error","msg":"Attempt 1/1 failed with 1 errors and: 507 Insufficient Storage","time":"x"}`,
 		`{"level":"info","msg":"There was nothing to transfer","time":"x"}`,
+		// with a backup directory: a replaced file is moved away and then copied "new", a deleted one
+		// is moved into the backup directory
+		`{"level":"info","msg":"Moved (server-side)","object":"v.txt","time":"x"}`,
+		`{"level":"info","msg":"Copied (new)","object":"v.txt","time":"x"}`,
+		`{"level":"info","msg":"Moved (server-side)","object":"vgone.txt","time":"x"}`,
+		`{"level":"info","msg":"Moved into backup dir","object":"vgone.txt","time":"x"}`,
 		`not json at all`,
 		``,
 	} {
 		parseRclone(l, true, rl, &rec, &prog)
 	}
 	parseRclone(`{"level":"info","msg":"Copied (new)","object":"stdout.txt"}`, false, rl, &rec, &prog)
-	if rec.Copied != 2 || rec.Replaced != 1 || rec.Deleted != 2 || rec.Errors != 2 || rec.Bytes != 2048 || prog.Percent != 50 || prog.Speed != "1024 KiB/s" || !strings.Contains(rec.Error, "big.bin") {
+	if rec.Copied != 2 || rec.Replaced != 2 || rec.Deleted != 3 || rec.Errors != 2 || rec.Bytes != 2048 || prog.Percent != 50 || prog.Speed != "1024 KiB/s" || !strings.Contains(rec.Error, "big.bin") {
 		t.Errorf("%+v %+v", rec, prog)
 	}
 	for _, c := range []struct {
@@ -444,6 +479,40 @@ func TestParseRclone(t *testing.T) {
 	} {
 		if got := rcloneResult(c.exit, c.text); got != c.want {
 			t.Errorf("%d %q: %s", c.exit, c.text, got)
+		}
+	}
+}
+
+// A job with a schedule whose last good run is older than twice its interval is overdue; a manual
+// job never is, a failed or a dry run does not count as a run, and a job that was just made or
+// pointed elsewhere starts anew.
+func TestOverdue(t *testing.T) {
+	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	ago := func(d time.Duration) time.Time { return now.Add(-d) }
+	job := Job{ID: "x", Created: ago(100 * 24 * time.Hour), Changed: ago(100 * 24 * time.Hour)}
+	ok := func(d time.Duration) Record { return Record{Result: ResultOK, End: ago(d)} }
+	for what, c := range map[string]struct {
+		s    Schedule
+		hist []Record
+		job  Job
+		late bool
+	}{
+		"daily, ran yesterday":                {Schedule{Kind: Daily}, []Record{ok(30 * time.Hour)}, job, false},
+		"daily, ran three days ago":           {Schedule{Kind: Daily}, []Record{ok(72 * time.Hour)}, job, true},
+		"daily, only failures since":          {Schedule{Kind: Daily}, []Record{{Result: ResultFailed, End: ago(time.Hour)}, ok(72 * time.Hour)}, job, true},
+		"daily, only a dry run since":         {Schedule{Kind: Daily}, []Record{{Result: ResultOK, DryRun: true, End: ago(time.Hour)}, ok(72 * time.Hour)}, job, true},
+		"daily, done with warnings":           {Schedule{Kind: Daily}, []Record{{Result: ResultWarnings, End: ago(time.Hour)}}, job, false},
+		"hourly, ran three hours ago":         {Schedule{Kind: Hourly}, []Record{ok(3 * time.Hour)}, job, true},
+		"weekly, ran ten days ago":            {Schedule{Kind: Weekly}, []Record{ok(10 * 24 * time.Hour)}, job, false},
+		"custom, ran four days ago":           {Schedule{Kind: Custom}, []Record{ok(4 * 24 * time.Hour)}, job, true},
+		"manual, never ran":                   {Schedule{Kind: Manual}, nil, job, false},
+		"daily, never ran, old job":           {Schedule{Kind: Daily}, nil, job, true},
+		"daily, never ran, made today":        {Schedule{Kind: Daily}, nil, Job{Created: ago(time.Hour), Changed: ago(time.Hour)}, false},
+		"daily, pointed elsewhere today":      {Schedule{Kind: Daily}, []Record{ok(72 * time.Hour)}, Job{Created: ago(100 * 24 * time.Hour), Changed: ago(time.Hour)}, false},
+		"a mirror job that waits to be tried": {Schedule{Kind: Daily}, nil, Job{Created: ago(100 * 24 * time.Hour), NeedsDryRun: true}, false},
+	} {
+		if _, late := Overdue(c.job, c.s, c.hist, now); late != c.late {
+			t.Errorf("%s: overdue %v", what, late)
 		}
 	}
 }

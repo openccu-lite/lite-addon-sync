@@ -126,10 +126,17 @@ test('a copy job: the folder picker and what is never copied, tried, run, in the
     await dlg.getByTestId('job-folder').fill('kopien/export');
     await dlg.getByTestId('job-schedule-kind').selectOption('daily');
     await dlg.getByTestId('job-time').fill('03:00');
+    // versions: off by default, 30 days when switched on
+    await expect(dlg.getByTestId('job-versions-days')).toHaveCount(0);
+    await dlg.getByTestId('job-versions').check();
+    await expect(dlg.getByTestId('job-versions-days')).toHaveValue('30');
+    const created = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/api/v1/jobs'));
     await dlg.getByTestId('job-save').click();
+    expect((await created).postDataJSON()).toMatchObject({versions: true, versions_days: 30});
     await expect(dlg).toBeHidden();
 
     const job = row(page, 'Export');
+    await expect(job).toContainText('versions');
     await expect(job.getByTestId('job-schedule')).toHaveText('daily 03:00');
     await expect(job.getByTestId('job-pill')).toHaveAttribute('data-state', 'never');
     await expect(job.getByTestId('job-next')).not.toHaveText('–');
