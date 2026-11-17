@@ -11,6 +11,8 @@ a target on the system's **Backup** page - beside the USB stick, the network sha
 schedule, the same retention, *Test*, *Back up now*, *Backups here* and *Restore this*. The transfer is
 [rclone](https://rclone.org)'s, which comes with the addon and is never part of the system image.
 
+![Accounts](docs/screenshots/01-konten.png)
+
 ## What it does
 
 - **Connects accounts** (the addon's page): OneDrive, Google Drive and Dropbox with a login at the provider, S3 and
@@ -35,6 +37,8 @@ system, not your PC. Hence two ways, both in the dialog:
    paste it into the dialog. Nothing needs to be installed on your PC.
 2. **With rclone on another computer:** the dialog shows the command `rclone authorize "…"`; run it where a browser
    is, and paste what it prints.
+
+![The login](docs/screenshots/02-anmeldung.png)
 
 What the providers ask for:
 

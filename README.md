@@ -13,6 +13,8 @@ mit demselben Zeitplan, derselben Aufbewahrung, *Test*, *Jetzt sichern*, *Sicher
 wiederherstellen*. Die Übertragung macht [rclone](https://rclone.org), das mit dem Addon kommt und nie Teil des
 System-Images ist.
 
+![Konten](docs/screenshots/01-konten.png)
+
 ## Was es tut
 
 - **Konten verbinden** (Seite des Addons): OneDrive, Google Drive und Dropbox mit einer Anmeldung beim Anbieter, S3 und
@@ -40,6 +42,8 @@ und das ist das System, nicht Ihr PC. Deshalb zwei Wege, beide im Dialog:
    Adresse aus der Adresszeile und fügen Sie sie im Dialog ein. Auf Ihrem PC muss nichts installiert sein.
 2. **Mit rclone auf einem anderen Computer:** Der Dialog zeigt den Befehl `rclone authorize "…"`; führen Sie ihn dort
    aus, wo ein Browser ist, und fügen Sie ein, was er ausgibt.
+
+![Anmeldung](docs/screenshots/02-anmeldung.png)
 
 Was die Anbieter verlangen:
 
