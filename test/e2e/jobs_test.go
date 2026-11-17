@@ -14,6 +14,7 @@ import (
 
 	"github.com/openccu-lite/lite-addon-sync/internal/accounts"
 	"github.com/openccu-lite/lite-addon-sync/internal/jobs"
+	"github.com/openccu-lite/lite-addon-sync/internal/rclone"
 	"github.com/openccu-lite/lite-addon-sync/internal/servers"
 )
 
@@ -79,7 +80,11 @@ func newJobFixture(t *testing.T, confDir string) *jobFixture {
 }
 
 // scenario runs the same story against either tool: target is where the files land on this machine.
-func (f *jobFixture) scenario(t *testing.T, tg jobs.Target, target string, tool string) {
+//
+// plant puts a file onto the target as somebody else would: through the server for the WebDAV
+// account (a file written behind the server's back is not seen by it for minutes - and telling it
+// to keep no directory cache made every move slow), straight into the folder for the SSH server.
+func (f *jobFixture) scenario(t *testing.T, tg jobs.Target, target string, tool string, plant func(rel, text string)) {
 	t.Helper()
 	ctx := context.Background()
 	j, err := f.store.Create(jobs.Spec{Name: "Export " + tool, Source: f.source, Target: tg, Excludes: []string{"/cache/**"}, Schedule: jobs.Schedule{Kind: jobs.Manual}})
@@ -165,7 +170,8 @@ func (f *jobFixture) scenario(t *testing.T, tg jobs.Target, target string, tool 
 	time.Sleep(1100 * time.Millisecond)
 	writeTree(t, f.source, tree{"a.txt": "alpha once more"})
 	_ = os.Remove(filepath.Join(f.source, "new.txt"))
-	writeTree(t, filepath.Join(target, ".versions"), tree{"20200101T000000Z/old.txt": "old", "notes/keep.txt": "not a run's folder"})
+	plant(".versions/20200101T000000Z/old.txt", "old")
+	plant(".versions/notes/keep.txt", "not a run's folder")
 	if rec, err = jobs.Run(ctx, f.env, j.ID); err != nil || rec.Replaced != 1 || rec.Deleted != 1 {
 		t.Fatalf("a run with versions: %+v %v", rec, err)
 	}
@@ -196,7 +202,9 @@ func (f *jobFixture) scenario(t *testing.T, tg jobs.Target, target string, tool 
 	sp.MaxDelete = &max
 	j, _ = f.store.Update(j.ID, sp)
 	_, _ = f.store.Set(j.ID, func(j *jobs.Job) { j.NeedsDryRun = false })
-	writeTree(t, target, tree{"x1": "1", "x2": "2", "x3": "3"})
+	for _, n := range []string{"x1", "x2", "x3"} {
+		plant(n, n)
+	}
 	if rec, err = jobs.Run(ctx, f.env, j.ID); err == nil || rec.Result != jobs.ResultTooManyDeletes {
 		t.Errorf("past the deletion limit: %+v %v", rec, err)
 	}
@@ -250,7 +258,11 @@ func TestCopyJobWithRclone(t *testing.T) {
 	}
 	f := newJobFixture(t, r.store.Dir)
 	f.env.Rclone = r.runner
-	f.scenario(t, jobs.Target{Kind: jobs.TargetAccount, ID: acc.ID, Folder: "copies/export"}, filepath.Join(r.remote, "copies", "export"), "rclone")
+	f.scenario(t, jobs.Target{Kind: jobs.TargetAccount, ID: acc.ID, Folder: "copies/export"}, filepath.Join(r.remote, "copies", "export"), "rclone", func(rel, text string) {
+		if err := r.runner.Rcat(ctx, rclone.Path(acc.Remote(), "copies/export", rel), int64(len(text)), strings.NewReader(text), 0); err != nil {
+			t.Fatal(err)
+		}
+	})
 
 	// a target that is gone, and a login that is refused, are said as what they are
 	j, _ := f.store.Create(jobs.Spec{Name: "Weg", Source: f.source, Target: jobs.Target{Kind: jobs.TargetAccount, ID: "zzzz000009", Folder: "x"}, Schedule: jobs.Schedule{Kind: jobs.Manual}})
@@ -383,7 +395,9 @@ func TestCopyJobWithRsyncOverSSH(t *testing.T) {
 		t.Errorf("the test left something: %q", got)
 	}
 	_ = f.store.Delete(early.ID)
-	f.scenario(t, jobs.Target{Kind: jobs.TargetServer, ID: srv.ID, Folder: "copies/export"}, filepath.Join(base, "copies", "export"), "rsync")
+	f.scenario(t, jobs.Target{Kind: jobs.TargetServer, ID: srv.ID, Folder: "copies/export"}, filepath.Join(base, "copies", "export"), "rsync", func(rel, text string) {
+		writeTree(t, filepath.Join(base, "copies", "export"), tree{rel: text})
+	})
 
 	// a server that shows another host key afterwards is refused: nothing is accepted on the way
 	port2 := sshd(t, authorized)

@@ -3,6 +3,7 @@ package addonpkg
 
 import (
 	"encoding/json"
+	kitmanifest "github.com/hobbyquaker/ccu-addon-kit/go/addonkit/manifest"
 	"os"
 	"os/exec"
 	"regexp"
@@ -67,6 +68,18 @@ func load(t *testing.T) manifest {
 		t.Fatal(err)
 	}
 	return m
+}
+
+// The kit's loader takes the manifest as the system does - strictly, with the backup block's
+// targets, runtime.bin, runtime.timers and read_addon_data, which it knows since d8a1f48.
+func TestManifestLoadsWithTheKit(t *testing.T) {
+	km, err := kitmanifest.Load("../../addon/openccu-lite.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if km.ID != "sync" || km.Runtime == nil || km.Runtime.Timers == nil || km.Runtime.Timers.Exec != "lite-sync" || !km.Runtime.ReadAddonData {
+		t.Errorf("%+v", km.Runtime)
+	}
 }
 
 // The manifest: the provider declaration as the system's contract wants it, and no privilege.

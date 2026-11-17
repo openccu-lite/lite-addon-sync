@@ -64,7 +64,7 @@ func freePort(t *testing.T) int {
 func webdav(t *testing.T, bin, dir string) string {
 	t.Helper()
 	port := freePort(t)
-	cmd := exec.Command(bin, "serve", "webdav", dir, "--addr", fmt.Sprintf("127.0.0.1:%d", port), "--user", "backup", "--pass", "s3cret-pass", "--dir-cache-time", "0s", "--config", filepath.Join(t.TempDir(), "none.conf"))
+	cmd := exec.Command(bin, "serve", "webdav", dir, "--addr", fmt.Sprintf("127.0.0.1:%d", port), "--user", "backup", "--pass", "s3cret-pass", "--config", filepath.Join(t.TempDir(), "none.conf"))
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
