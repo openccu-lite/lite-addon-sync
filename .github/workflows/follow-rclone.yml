@@ -1,0 +1,217 @@
+# Follows rclone's releases: once a day it looks at the newest rclone release, and when scripts/rclone.pin is behind
+# it rewrites the pin (the version and the SHA-256 of upstream's zips, from upstream's own SHA256SUMS), runs the
+# full gate - the Go tests with the new rclone against a WebDAV server, the page, the packages - and, on green, bumps
+# the addon's patch version, commits, tags and publishes the release with the packages and their .sha256 sidecars.
+# On red nothing is released: an issue names the failing run. The cloud providers change their APIs and rclone
+# follows them, so an addon that stands still stops working; this keeps it moving without a hand. The logins at
+# OneDrive, Google Drive and Dropbox themselves cannot be tested here (they need accounts): they are tried by hand
+# before a release that the changelog of rclone says touches them.
+#
+# workflow_dispatch runs it by hand; with dry_run nothing is pushed or released.
+name: follow-rclone
+
+on:
+  schedule:
+    - cron: '41 4 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'check and gate, but neither push nor release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: follow-rclone
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: is there a newer rclone?
+    runs-on: ubuntu-latest
+    outputs:
+      current: ${{ steps.v.outputs.current }}
+      latest: ${{ steps.v.outputs.latest }}
+      bump: ${{ steps.v.outputs.bump }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          . scripts/rclone.pin
+          current=$RCLONE_VERSION
+          latest=$(gh api repos/rclone/rclone/releases --paginate --jq '.[] | select(.prerelease == false and .draft == false) | .tag_name' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          echo "current=$current latest=$latest"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if [ -n "$latest" ] && [ "$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -1)" = "$latest" ] && [ "$current" != "$latest" ]; then
+            echo "bump=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "bump=no" >> "$GITHUB_OUTPUT"
+          fi
+
+  bump:
+    name: pin rclone ${{ needs.check.outputs.latest }}
+    needs: check
+    if: needs.check.outputs.bump == 'yes'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: the pin, from upstream's SHA256SUMS
+        env:
+          RC: ${{ needs.check.outputs.latest }}
+        run: |
+          set -eu
+          curl -fsSL --retry 3 -o /tmp/SHA256SUMS "https://downloads.rclone.org/$RC/SHA256SUMS"
+          amd=$(awk -v f="rclone-$RC-linux-amd64.zip" '$2 == f {print $1}' /tmp/SHA256SUMS)
+          arm=$(awk -v f="rclone-$RC-linux-arm64.zip" '$2 == f {print $1}' /tmp/SHA256SUMS)
+          echo "$amd" | grep -Eq '^[0-9a-f]{64}$'
+          echo "$arm" | grep -Eq '^[0-9a-f]{64}$'
+          sed -i -e "s/^RCLONE_VERSION=.*/RCLONE_VERSION=$RC/" -e "s/^RCLONE_SHA256_x86_64=.*/RCLONE_SHA256_x86_64=$amd/" -e "s/^RCLONE_SHA256_aarch64=.*/RCLONE_SHA256_aarch64=$arm/" scripts/rclone.pin
+          cat scripts/rclone.pin
+          # rclone's licence, as that release carries it
+          curl -fsSL --retry 3 -o licences/rclone-COPYING "https://raw.githubusercontent.com/rclone/rclone/$RC/COPYING"
+      - id: ver
+        run: |
+          set -eu
+          cur=$(python3 -c "import json;print(json.load(open('addon/openccu-lite.json'))['version'])")
+          new=$(python3 -c "v='$cur'.split('.');v[2]=str(int(v[2])+1);print('.'.join(v))")
+          echo "version=$new" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+          echo "$cur -> $new"
+      - name: the manifest's version and the changelog entry
+        run: |
+          set -eu
+          python3 - <<'EOF'
+          import os, re
+          new = os.environ['NEW']; rc = os.environ['RC'].lstrip('v')
+          p = 'addon/openccu-lite.json'
+          s = open(p).read()
+          s, n = re.subn(r'"version": "[^"]*"', '"version": "%s"' % new, s, count=1)
+          assert n == 1
+          open(p, 'w').write(s)
+          cl = open('CHANGELOG.md').read()
+          entry = f"## [{new}] - {os.environ['DATE']}\n\n- rclone {rc} (upstream's release binary, pinned by its SHA-256; released by the release-following workflow).\n\n"
+          cl = cl.replace('# Changelog\n\n', '# Changelog\n\n' + entry, 1)
+          open('CHANGELOG.md', 'w').write(cl)
+          EOF
+        env:
+          NEW: ${{ steps.ver.outputs.version }}
+          RC: ${{ needs.check.outputs.latest }}
+          DATE: ${{ steps.ver.outputs.date }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bumped-tree
+          path: |
+            scripts/rclone.pin
+            licences/rclone-COPYING
+            addon/openccu-lite.json
+            CHANGELOG.md
+          retention-days: 3
+
+  gate:
+    name: the full gate on the bumped tree
+    needs: [check, bump]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: bumped-tree
+          path: .
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+      - run: scripts/fetch-rclone.sh x86_64
+      - run: go test -race -count=1 ./...
+      - run: npm ci --no-audit --no-fund
+        working-directory: ui
+      - run: npm run check
+        working-directory: ui
+      - run: npm test
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
+      - run: npx playwright install --with-deps chromium
+        working-directory: ui
+      - run: npx playwright test
+        working-directory: ui
+      - run: VERSION=${{ needs.bump.outputs.version }} scripts/build.sh
+      - run: ls -l dist/ && tar tzf dist/sync-x86_64-${{ needs.bump.outputs.version }}.tar.gz | grep -qx './sync/bin/rclone'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: dist/
+          retention-days: 7
+
+  release:
+    name: commit, tag and release v${{ needs.bump.outputs.version }}
+    needs: [check, bump, gate]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: bumped-tree
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dist
+      - name: commit and tag
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/rclone.pin licences/rclone-COPYING addon/openccu-lite.json CHANGELOG.md
+          git commit -m "rclone ${{ needs.check.outputs.latest }}: lite-addon-sync ${{ needs.bump.outputs.version }}
+
+          The release-following workflow: rclone released ${{ needs.check.outputs.latest }}, the pin follows it (the
+          version and the SHA-256 of upstream's zips), the full gate (Go with the new rclone against a WebDAV server,
+          the page, the packages) was green on this tree."
+          git tag -a "v${{ needs.bump.outputs.version }}" -m "lite-addon-sync ${{ needs.bump.outputs.version }} (rclone ${{ needs.check.outputs.latest }})"
+          git push origin HEAD:main "v${{ needs.bump.outputs.version }}"
+      - name: the release with the packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          v=${{ needs.bump.outputs.version }}
+          rc=${{ needs.check.outputs.latest }}
+          printf 'lite-addon-sync %s.\n\n- rclone %s (upstream'"'"'s release binary, pinned by its SHA-256; released by the repository'"'"'s release-following workflow after its full gate).\n\nThe packages per architecture (`uname -m`) with their `.sha256` sidecars; the system'"'"'s Addons page installs them.\n' "$v" "${rc#v}" > /tmp/notes.md
+          gh release create "v$v" --title "v$v" --notes-file /tmp/notes.md dist/*.tar.gz dist/*.sha256
+
+  red:
+    name: open an issue when the gate failed
+    needs: [check, bump, gate]
+    if: ${{ failure() && needs.check.outputs.bump == 'yes' }}
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          title="follow-rclone: ${{ needs.check.outputs.latest }} did not pass the gate"
+          if gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json title --jq '.[].title' | grep -qF "$title"; then
+            echo "an issue is open already"; exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "The release-following workflow tried to move the pinned rclone from ${{ needs.check.outputs.current }} to ${{ needs.check.outputs.latest }}, and the gate went red: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Nothing was released. The bump needs a hand: a changed option, a changed output the addon reads, or a test that the new version breaks."

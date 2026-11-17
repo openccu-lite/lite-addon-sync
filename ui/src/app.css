@@ -1,0 +1,301 @@
+/* The page's own rules on top of occulite-ui's tokens. Colours are the kit's custom properties
+   only, so dark mode comes with them. Nothing changes its box with its state: every pill reserves
+   the width of its widest label, a button that says "Testing…" keeps the width of "Test", long
+   names are cut with an ellipsis and carry the whole text as their tooltip. */
+
+html,
+body,
+#app {
+    height: 100%;
+    margin: 0;
+}
+
+.sy-app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.sy-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 12px 0;
+    flex-wrap: wrap;
+}
+
+.sy-header h1 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0 4px 0 0;
+}
+
+.sy-spacer {
+    flex: 1;
+}
+
+.sy-page {
+    flex: 1;
+    min-height: 0;
+    padding: 8px 12px 24px;
+    overflow: auto;
+}
+
+.sy-section {
+    max-width: 60rem;
+}
+
+.sy-section-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.sy-section-head h2 {
+    flex: 1;
+    font-size: 1rem;
+    margin: 8px 0;
+}
+
+.sy-lead {
+    margin: 0 0 10px;
+}
+
+.sy-banner {
+    margin: 6px 12px 0;
+    padding: 6px 10px;
+    border-radius: var(--hmm-radius, 4px);
+    border: 1px solid var(--hmm-border, #8884);
+    border-left-width: 3px;
+}
+
+.sy-banner-error {
+    border-left-color: var(--hmm-error, #c33);
+}
+
+.sy-banner-warn {
+    border-left-color: var(--hmm-warn, #c80);
+}
+
+.sy-muted,
+.sy-help {
+    color: var(--hmm-fg-muted, inherit);
+    font-size: var(--hmm-font-size-small, 0.9em);
+}
+
+.sy-help {
+    margin: 0;
+}
+
+.sy-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sy-card {
+    border: 1px solid var(--hmm-border-muted, #8883);
+    border-radius: var(--hmm-radius, 4px);
+    padding: 10px 12px;
+    min-width: 0;
+}
+
+.sy-card.bad {
+    border-left: 3px solid var(--hmm-error, #c33);
+}
+
+.sy-card-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+}
+
+.sy-card-title {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sy-card-title .sy-detail {
+    font-weight: 400;
+    color: var(--hmm-fg-muted, inherit);
+}
+
+.sy-card-lines {
+    margin: 4px 0 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.sy-card-foot {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* a pill keeps its box across states: every label lies in the same grid cell, the shown one on top */
+.sy-pill {
+    display: inline-grid;
+    justify-items: center;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 0.85em;
+    line-height: 1.6;
+    white-space: nowrap;
+    border: 1px solid var(--hmm-border, #8884);
+}
+
+.sy-pill > span {
+    grid-area: 1 / 1;
+}
+
+.sy-pill-size {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.sy-pill.ok {
+    border-color: var(--hmm-ok, #2a8a3e);
+    color: var(--hmm-ok, #2a8a3e);
+}
+
+.sy-pill.bad {
+    border-color: var(--hmm-error, #c33);
+    color: var(--hmm-error, #c33);
+}
+
+/* a button whose label changes with what it does keeps the width of its widest label */
+.sy-sized {
+    display: inline-grid;
+    justify-items: center;
+}
+
+.sy-sized > span {
+    grid-area: 1 / 1;
+}
+
+.sy-sized > .sy-size {
+    visibility: hidden;
+}
+
+button.sy-primary,
+button.sy-primary:hover:not(:disabled),
+a.sy-primary {
+    background: var(--hmm-accent, #0070c1);
+    color: var(--hmm-accent-fg, #fff);
+    border-color: transparent;
+}
+
+button.sy-danger {
+    background: var(--hmm-error, #c33);
+    color: #fff;
+    border-color: transparent;
+}
+
+a.hmm-button {
+    text-decoration: none;
+}
+
+.sy-form {
+    display: grid;
+    grid-template-columns: minmax(8rem, max-content) minmax(0, 1fr);
+    gap: 8px 12px;
+    align-items: center;
+}
+
+.sy-form .sy-span {
+    grid-column: 1 / -1;
+}
+
+.sy-form input[type='text'],
+.sy-form input[type='password'],
+.sy-form input[type='number'],
+.sy-form input[type='url'],
+.sy-form select,
+.sy-form textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+}
+
+.sy-form textarea {
+    font-family: var(--hmm-font-mono, monospace);
+    font-size: var(--hmm-font-size-small, 0.9em);
+    resize: vertical;
+}
+
+.sy-label {
+    color: var(--hmm-fg-muted, inherit);
+}
+
+.sy-steps {
+    margin: 0;
+    padding-left: 1.4em;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sy-steps li > * {
+    margin-top: 4px;
+}
+
+.sy-code {
+    display: block;
+    font-family: var(--hmm-font-mono, monospace);
+    font-size: var(--hmm-font-size-small, 0.9em);
+    padding: 6px 8px;
+    border: 1px solid var(--hmm-border-muted, #8883);
+    border-radius: var(--hmm-radius, 4px);
+    overflow-wrap: anywhere;
+    user-select: all;
+}
+
+.sy-notice {
+    padding: 6px 10px;
+    border-left: 3px solid var(--hmm-accent, #2a7de1);
+    background: var(--hmm-bg-sunken, transparent);
+}
+
+/* the dialog's error line keeps its line whether it says something or not */
+.sy-error {
+    color: var(--hmm-error, #c33);
+    min-height: 1.4em;
+    margin: 4px 0 0;
+    overflow-wrap: anywhere;
+}
+
+.sy-linkbutton {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--hmm-accent, #0070c1);
+    cursor: pointer;
+    font: inherit;
+    text-decoration: underline;
+}
+
+.sy-empty {
+    padding: 18px 12px;
+    border: 1px dashed var(--hmm-border-muted, #8883);
+    border-radius: var(--hmm-radius, 4px);
+    text-align: center;
+}
+
+@media (max-width: 520px) {
+    .sy-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

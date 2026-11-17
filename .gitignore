@@ -1,0 +1,17 @@
+/dist/
+/build/
+/ui/node_modules/
+/ui/dist/
+/ui/test-results/
+/ui/playwright-report/
+# the build fills app/ and bin/ (the daemon and the pinned rclone); the manifest's icons, the 503
+# page and the proxy rule are tracked in the tree, where the catalogue reads the icons beside the
+# manifest at the release tag
+/addon/sync/app/
+/addon/sync/bin/
+/addon/sync/licences/
+/addon/sync/versions
+/addon/sync/var/
+
+# lab walks (addresses and logins of a lab) never belong here
+/ui/lab-*.mjs
