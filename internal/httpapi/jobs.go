@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"net/http"
 	"sort"
@@ -11,6 +12,7 @@ import (
 	"github.com/hobbyquaker/ccu-addon-kit/go/addonkit"
 
 	"github.com/openccu-lite/lite-addon-sync/internal/jobs"
+	"github.com/openccu-lite/lite-addon-sync/internal/rclone"
 	"github.com/openccu-lite/lite-addon-sync/internal/servers"
 	"github.com/openccu-lite/lite-addon-sync/internal/systimers"
 )
@@ -375,16 +377,54 @@ func (s *server) jobCreate(w http.ResponseWriter, r *http.Request) {
 		s.writeJobErr(w, err)
 		return
 	}
+	// an encrypted job gets a crypt remote of its own over its folder, with a password made here
+	// and answered once: it is never read back
+	password := ""
+	if j.Encrypt {
+		acc, _ := s.o.Accounts.Get(j.Target.ID)
+		password = newPassword()
+		if err := s.o.Accounts.Rclone.ConfigCreate(r.Context(), jobs.CryptRemote(j.ID), "crypt", map[string]string{
+			"remote": rclone.Path(acc.Remote(), acc.Root, j.Target.Folder), "password": password, "filename_encryption": "standard", "directory_name_encryption": "true"}); err != nil {
+			_ = s.o.Jobs.Delete(j.ID)
+			writeErr(w, err)
+			return
+		}
+	}
 	text := jobs.TimerText(j.ID, j.Schedule)
 	enabled := j.Schedule.Kind != jobs.Manual && !j.NeedsDryRun
 	if _, err := s.o.Timers.Put(r.Context(), j.ID, systimers.Input{Timer: text, Description: &j.Name, Read: readList(j), Enabled: &enabled}); err != nil {
 		_ = s.o.Jobs.Delete(j.ID)
+		if j.Encrypt {
+			_ = s.o.Accounts.Rclone.ConfigDelete(r.Context(), jobs.CryptRemote(j.ID))
+		}
 		s.writeJobErr(w, err)
 		return
 	}
 	j, _ = s.o.Jobs.Set(j.ID, func(j *jobs.Job) { j.TimerHash = jobs.Hash(text) })
 	s.o.Log("the copy job %q was made: %s → %s %s (%s)", j.Name, j.Source, j.Target.Kind, j.Target.Folder, j.Mode)
-	writeJSON(w, http.StatusCreated, s.jobView(j, s.timerState(r.Context(), true)))
+	v := s.jobView(j, s.timerState(r.Context(), true))
+	if password != "" {
+		writeJSON(w, http.StatusCreated, struct {
+			JobView
+			CryptPassword string `json:"crypt_password"`
+		}{v, password})
+		return
+	}
+	writeJSON(w, http.StatusCreated, v)
+}
+
+// newPassword makes the password of an encrypted job: 32 characters that are easy to write down
+// (no 0/O, 1/l/I), about 160 bits.
+func newPassword() string {
+	const letters = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	for i := range b {
+		b[i] = letters[int(b[i])%len(letters)]
+	}
+	return string(b)
 }
 
 func (s *server) jobUpdate(w http.ResponseWriter, r *http.Request) {
@@ -432,6 +472,15 @@ func (s *server) jobUpdate(w http.ResponseWriter, r *http.Request) {
 		s.writeJobErr(w, err)
 		return
 	}
+	// an encrypted job that was pointed at another folder or account: its crypt remote follows,
+	// the password stays
+	if j.Encrypt && j.Target != old.Target {
+		acc, _ := s.o.Accounts.Get(j.Target.ID)
+		if err := s.o.Accounts.Rclone.ConfigUpdate(r.Context(), jobs.CryptRemote(id), map[string]string{"remote": rclone.Path(acc.Remote(), acc.Root, j.Target.Folder)}); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
 	put := systimers.Input{Description: &j.Name, Read: readList(j)}
 	// the timer's text is written only when the schedule itself was chosen anew (or the timer is gone)
 	switch {
@@ -478,6 +527,10 @@ func (s *server) jobDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jobs.DeleteHistory(s.o.AddonDir, id)
+	if j.Encrypt {
+		// the password goes with the job: who wants to read the copies later has written it down
+		_ = s.o.Accounts.Rclone.ConfigDelete(r.Context(), jobs.CryptRemote(id))
+	}
 	s.o.Log("the copy job %q was deleted (nothing on its target was touched)", j.Name)
 	w.WriteHeader(http.StatusNoContent)
 }

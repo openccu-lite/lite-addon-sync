@@ -77,7 +77,7 @@ func OldVersions(names []string, days int, now time.Time) []string {
 }
 
 // RcloneArgs are rclone's arguments for a run (after Runner.JobCommand's own).
-func RcloneArgs(j Job, source, remote, root, excludeFile, stamp string, dryRun bool) []string {
+func RcloneArgs(j Job, source, dest, excludeFile, stamp string, dryRun bool) []string {
 	verb := "copy"
 	if j.Mode == ModeMirror {
 		verb = "sync"
@@ -90,12 +90,30 @@ func RcloneArgs(j Job, source, remote, root, excludeFile, stamp string, dryRun b
 		args = append(args, "--bwlimit", strconv.Itoa(j.BwLimit)+"k")
 	}
 	if j.Versions {
-		args = append(args, "--backup-dir", rclone.Path(remote, root, j.Target.Folder, VersionsDir, stamp))
+		args = append(args, "--backup-dir", RcloneJoin(dest, VersionsDir, stamp))
 	}
 	if dryRun {
 		args = append(args, "--dry-run")
 	}
-	return append(args, source, rclone.Path(remote, root, j.Target.Folder))
+	return append(args, source, dest)
+}
+
+// RcloneDest is where a job's files go on its account: the job's folder below the account's root,
+// or - for an encrypted job - the job's own crypt remote, which lies over that folder.
+func RcloneDest(j Job, remote, root string) string {
+	if j.Encrypt {
+		return CryptRemote(j.ID) + ":"
+	}
+	return rclone.Path(remote, root, j.Target.Folder)
+}
+
+// RcloneJoin appends path parts to a destination ("remote:" or "remote:path").
+func RcloneJoin(dest string, parts ...string) string {
+	p := strings.Join(parts, "/")
+	if strings.HasSuffix(dest, ":") {
+		return dest + p
+	}
+	return dest + "/" + p
 }
 
 var (

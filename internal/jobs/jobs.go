@@ -68,6 +68,10 @@ type Job struct {
 	// of runs older than that many days after a run, 0 = they are kept until somebody removes them.
 	Versions     bool `json:"versions"`
 	VersionsDays int  `json:"versions_days"`
+	// Encrypt: the copies on an account are encrypted by rclone (crypt): contents and names. Chosen
+	// when the job is made and not changed afterwards - a folder would hold both kinds. The
+	// password is in rclone's configuration (obscured, as rclone keeps it) and was shown once.
+	Encrypt bool `json:"encrypt,omitempty"`
 	// Schedule is what the job dialog chose last; the timer on the system is the truth.
 	Schedule Schedule `json:"schedule"`
 	// TimerHash is the SHA-256 of the timer text the addon wrote last: a different text on the
@@ -94,6 +98,7 @@ type Spec struct {
 	BwLimit      int      `json:"bwlimit_kbps"`
 	Versions     bool     `json:"versions"`
 	VersionsDays int      `json:"versions_days"`
+	Encrypt      bool     `json:"encrypt"`
 	Schedule     Schedule `json:"schedule"`
 }
 
@@ -237,6 +242,13 @@ func (j *Job) apply(sp Spec) (changed bool, err error) {
 	if !sp.Versions {
 		sp.VersionsDays = 0
 	}
+	if sp.Encrypt && sp.Target.Kind != TargetAccount {
+		return false, invalid("encrypt: only the copies on an account can be encrypted (rsync has nothing like it)")
+	}
+	if j.ID != "" && sp.Encrypt != j.Encrypt {
+		return false, invalid("encrypt: chosen when a job is made and not changed afterwards - make a new job with another folder")
+	}
+	j.Encrypt = sp.Encrypt
 	j.Versions, j.VersionsDays = sp.Versions, sp.VersionsDays
 	changed = j.Source != src || j.Target != sp.Target || j.Mode != sp.Mode || j.ReadAddon != sp.ReadAddon
 	j.Name, j.Source, j.ReadAddon, j.Target, j.Mode, j.MaxDelete, j.Excludes, j.BwLimit = sp.Name, src, sp.ReadAddon, sp.Target, sp.Mode, maxDelete, ex, sp.BwLimit
@@ -409,3 +421,7 @@ func (s *Store) UsesTarget(kind, id string) []Job {
 	}
 	return out
 }
+
+// CryptRemote is the name of an encrypted job's remote in rclone's configuration: a crypt remote
+// over the job's folder on its account.
+func CryptRemote(jobID string) string { return "job-" + jobID }

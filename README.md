@@ -58,6 +58,11 @@ die Sie zusätzlich woanders haben möchten: die Datenbank eines Addons, Exporte
 - **Versionen:** Auf Wunsch bleibt erhalten, was ein Lauf auf dem Ziel ersetzt oder löscht: Es kommt in den Ordner
   `.versions` im Ordner des Auftrags, ein Ordner pro Lauf, und wird nach der eingestellten Zahl von Tagen wieder
   entfernt (oder nie).
+- **Verschlüsselt:** Ein Auftrag in ein Konto kann seine Kopien verschlüsseln – Inhalte, Datei- und Ordnernamen
+  (rclone crypt). Das System erzeugt das Passwort und zeigt es einmal an, wenn der Auftrag angelegt wird; ohne dieses
+  Passwort liest niemand die Kopien. Es liegt außerdem in den Einstellungen des Addons, so wie rclone es ablegt
+  (verschleiert, nicht verschlüsselt), und damit in der Sicherung des Systems. Um die Kopien anderswo zu lesen:
+  ein rclone-Remote vom Typ `crypt` über dem Ordner auf dem Ziel, mit diesem Passwort.
 - **Überfällig:** Ein Auftrag mit Zeitplan, dessen letzter erfolgreicher Lauf länger her ist als das Doppelte seines
   Abstands, steht als Hinweis auf der Seite Status des Systems, bis wieder ein Lauf gelingt.
 - **Verlauf:** jeder Lauf mit dem, was er kopiert, ersetzt und gelöscht hat, seinen Fehlern und seiner Dateiliste;
@@ -124,7 +129,8 @@ Adresse (`https://…/remote.php/dav/files/<name>`), Benutzer und ein **App-Pass
 
 ## Noch nicht enthalten
 
-Die Kopien auf dem Ziel verschlüsseln (rclone crypt).
+Ein Zeitfenster für die Begrenzung der Rate, Vergleich nach Prüfsumme, eine Nachricht (Webhook, ntfy) bei einem
+Fehler.
 
 ## Entwickeln
 

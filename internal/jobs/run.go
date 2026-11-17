@@ -557,7 +557,7 @@ func Run(ctx context.Context, env Env, jobID string) (Record, error) {
 			return finish(ResultFailed, "rclone is not there")
 		}
 		rec.Tool = "rclone"
-		cmd = env.Rclone.JobCommand(ctx, RcloneArgs(job, source, acc.Remote(), acc.Root, exFile, rec.ID, rec.DryRun)...)
+		cmd = env.Rclone.JobCommand(ctx, RcloneArgs(job, source, RcloneDest(job, acc.Remote(), acc.Root), exFile, rec.ID, rec.DryRun)...)
 		prune = func() { pruneRclone(ctx, env.Rclone, job, acc, logf) }
 		parse = func(line string, stderr bool) { parseRclone(line, stderr, rl, &rec, &prog) }
 		classify = rcloneResult
@@ -650,7 +650,7 @@ func Run(ctx context.Context, env Env, jobID string) (Record, error) {
 }
 
 func pruneRclone(ctx context.Context, rc *rclone.Runner, job Job, acc accounts.Account, logf func(string, ...any)) {
-	base := rclone.Path(acc.Remote(), acc.Root, job.Target.Folder, VersionsDir)
+	base := RcloneJoin(RcloneDest(job, acc.Remote(), acc.Root), VersionsDir)
 	dirs, err := rc.ListDirs(ctx, base)
 	if err != nil {
 		return // no versions yet

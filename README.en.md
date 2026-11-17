@@ -51,6 +51,10 @@ as well: an addon's database, exports, pictures.
   and is left alone until you replace it.
 - **Versions:** on request what a run replaces or deletes on the target is kept: it goes into the folder `.versions`
   inside the job's folder, one folder per run, and is removed again after the number of days you set (or never).
+- **Encrypted:** a job to an account can encrypt its copies - contents, file names and folder names (rclone's crypt).
+  The system makes the password and shows it once, when the job is made; without it nobody reads the copies. It is
+  also in the addon's settings as rclone keeps it (obscured, not encrypted), and so in the system's backup. To read
+  the copies elsewhere: an rclone remote of the type `crypt` over the folder on the target, with that password.
 - **Overdue:** a job with a schedule whose last run that worked is older than twice its interval is said on the
   system's Status page until a run works again.
 - **History:** every run with what it copied, replaced and deleted, its errors and its file list; the runs are also
@@ -117,7 +121,7 @@ best a key that may read and write this bucket and nothing else. **WebDAV / Next
 
 ## Not in it yet
 
-Encrypting the copies on the target (rclone crypt).
+A time window for the rate limit, comparing by checksum, a message (webhook, ntfy) on a failure.
 
 ## Developing
 

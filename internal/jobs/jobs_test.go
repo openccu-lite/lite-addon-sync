@@ -231,6 +231,7 @@ func TestSpecRules(t *testing.T) {
 		"a weekday that is none":     func(sp *Spec) { sp.Schedule = Schedule{Kind: Weekly, Time: "03:00", Weekday: "Mo"} },
 		"an unknown schedule":        func(sp *Spec) { sp.Schedule = Schedule{Kind: "minutely"} },
 		"a read grant with a slash":  func(sp *Spec) { sp.ReadAddon = "../occulite" },
+		"encryption on a server":     func(sp *Spec) { sp.Target.Kind, sp.Encrypt = TargetServer, true },
 	} {
 		sp := good
 		change(&sp)
@@ -260,6 +261,12 @@ func TestSpecRules(t *testing.T) {
 	mirror.Mode = ModeCopy
 	if m, _ = s.Update(m.ID, mirror); m.NeedsDryRun {
 		t.Errorf("a copy job waits for a dry run: %+v", m)
+	}
+	// encryption is chosen when a job is made, and stays
+	plain := good
+	plain.Encrypt = true
+	if _, err := s.Update("export", plain); err == nil {
+		t.Error("an existing job was switched to encrypted")
 	}
 	// the file is read again as it was written
 	s2, err := Open(s.Dir)
@@ -366,18 +373,24 @@ func TestToolArguments(t *testing.T) {
 	}
 
 	j = Job{ID: "x", Mode: ModeMirror, MaxDelete: 50, BwLimit: 512, Target: Target{Kind: TargetAccount, ID: "a", Folder: "db/history"}}
-	got := strings.Join(RcloneArgs(j, "/usr/local/addons/history/var", "acc-aone000001", "my-bucket", "/e", "s", true), "|")
+	got := strings.Join(RcloneArgs(j, "/usr/local/addons/history/var", RcloneDest(j, "acc-aone000001", "my-bucket"), "/e", "s", true), "|")
 	if got != "sync|--exclude-from|/e|--skip-links|--max-delete|50|--bwlimit|512k|--dry-run|/usr/local/addons/history/var|acc-aone000001:my-bucket/db/history" {
 		t.Errorf("rclone: %s", got)
 	}
 	j.Mode = ModeCopy
-	if got := strings.Join(RcloneArgs(j, "/usr/local/x", "acc-a", "", "/e", "s", false), "|"); got != "copy|--exclude-from|/e|--skip-links|--bwlimit|512k|/usr/local/x|acc-a:db/history" {
+	if got := strings.Join(RcloneArgs(j, "/usr/local/x", RcloneDest(j, "acc-a", ""), "/e", "s", false), "|"); got != "copy|--exclude-from|/e|--skip-links|--bwlimit|512k|/usr/local/x|acc-a:db/history" {
 		t.Errorf("rclone copy: %s", got)
 	}
 	j.Versions = true
-	if got := strings.Join(RcloneArgs(j, "/usr/local/x", "acc-a", "bucket", "/e", "20261117T030000Z", false), "|"); got != "copy|--exclude-from|/e|--skip-links|--bwlimit|512k|--backup-dir|acc-a:bucket/db/history/.versions/20261117T030000Z|/usr/local/x|acc-a:bucket/db/history" {
+	if got := strings.Join(RcloneArgs(j, "/usr/local/x", RcloneDest(j, "acc-a", "bucket"), "/e", "20261117T030000Z", false), "|"); got != "copy|--exclude-from|/e|--skip-links|--bwlimit|512k|--backup-dir|acc-a:bucket/db/history/.versions/20261117T030000Z|/usr/local/x|acc-a:bucket/db/history" {
 		t.Errorf("rclone with versions: %s", got)
 	}
+	// an encrypted job goes through its own crypt remote, versions too
+	j.Encrypt = true
+	if got := strings.Join(RcloneArgs(j, "/usr/local/x", RcloneDest(j, "acc-a", "bucket"), "/e", "20261117T030000Z", false), "|"); got != "copy|--exclude-from|/e|--skip-links|--bwlimit|512k|--backup-dir|job-x:.versions/20261117T030000Z|/usr/local/x|job-x:" {
+		t.Errorf("rclone encrypted: %s", got)
+	}
+	j.Encrypt = false
 	if ex := strings.Join(Excludes(j, t.TempDir()), "\n"); !strings.Contains(ex, "\n/.versions/") {
 		t.Errorf("the versions' folder is not left out of the copy:\n%s", ex)
 	}

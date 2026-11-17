@@ -581,3 +581,21 @@ func (r *Runner) Purge(ctx context.Context, path string) error {
 	}
 	return err
 }
+
+// ConfigUpdate changes parameters of a remote and leaves the others as they are.
+func (r *Runner) ConfigUpdate(ctx context.Context, name string, params map[string]string) error {
+	args := []string{"config", "update", name}
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sortStrings(keys)
+	for _, k := range keys {
+		args = append(args, k+"="+params[k])
+	}
+	args = append(args, "--non-interactive")
+	if _, err := r.run(ctx, nil, args...); err != nil {
+		return err
+	}
+	return os.Chmod(r.Config, 0o600)
+}

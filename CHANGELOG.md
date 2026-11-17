@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0] - 2026-11-17
+
+- **Encrypted copies:** a copy job to an account can encrypt what it copies - contents, file names and folder names
+  (rclone's crypt). The system makes the password and shows it once, when the job is made; the dialog closes only
+  after you said you stored it outside the system. Versions are encrypted with it. Chosen when a job is made and
+  not changed afterwards. Not for SSH servers: rsync has nothing like it. The system's backups do not need it -
+  they are encrypted before they reach the addon.
+
 ## [0.3.0] - 2026-11-17
 
 - **Versions:** a copy job can keep what a run replaces or deletes on the target. The old files go into the folder

@@ -276,6 +276,45 @@ test('a mirror job runs only after it was tried and looked at; German; deleted a
     await page.evaluate(() => localStorage.setItem('sync.language', 'en'));
 });
 
+test('an encrypted job: the password is shown once and the dialog waits until it is stored', async ({page}) => {
+    await page.goto('./#jobs');
+    await page.getByTestId('job-add').click();
+    const dlg = page.getByTestId('job-dialog');
+    await dlg.getByTestId('job-name').fill('Geheim');
+    await dlg.getByTestId('job-pick').click();
+    await dlg.locator('[data-testid="picker-folder"][data-name="export"]').getByTestId('picker-choose').click();
+    // no target yet, or a server: nothing to encrypt with
+    await expect(dlg.getByTestId('job-encrypt')).toHaveCount(0);
+    await dlg.getByTestId('job-target').selectOption({index: 1});
+    await dlg.getByTestId('job-folder').fill('geheim/export');
+    await dlg.getByTestId('job-encrypt').check();
+    await dlg.getByTestId('job-save').click();
+    const pw = dlg.getByTestId('job-password');
+    await expect(pw).toHaveText(/^[A-Za-z2-9]{32}$/);
+    const password = await pw.innerText();
+    await expect(dlg.getByTestId('job-password-done')).toBeDisabled();
+    // Escape does not lose it
+    await page.keyboard.press('Escape');
+    await expect(pw).toBeVisible();
+    await dlg.getByTestId('job-password-stored').check();
+    await dlg.getByTestId('job-password-done').click();
+    await expect(dlg).toBeHidden();
+    const job = row(page, 'Geheim');
+    await expect(job).toContainText('encrypted');
+    // never again: not in the state, and the dialog only says that it is encrypted
+    const state = await (await page.request.get('api/v1/state')).text();
+    expect(state).not.toContain(password);
+    await job.getByTestId('job-edit').click();
+    await expect(dlg.getByTestId('job-encrypt')).toBeChecked();
+    await expect(dlg.getByTestId('job-encrypt')).toBeDisabled();
+    await dlg.getByRole('button', {name: 'Cancel'}).click();
+    await job.getByTestId('job-run').click();
+    await expect(job.getByTestId('job-pill')).toHaveAttribute('data-state', 'ok', {timeout: 30_000});
+    await job.getByTestId('job-delete').click();
+    await page.getByTestId('job-delete-dialog-yes').click();
+    await expect(row(page, 'Geheim')).toHaveCount(0);
+});
+
 test('cleaning up: the job goes with its timer, the account can be removed again', async ({page}) => {
     await page.goto('./#jobs');
     await row(page, 'Export 2').getByTestId('job-delete').click();

@@ -282,6 +282,16 @@ const DE: Record<string, string> = {
     'The old files go into the folder .versions inside the folder on the target, one folder per run. 0 = they are never removed.': 'Die alten Dateien kommen in den Ordner .versions im Ordner auf dem Ziel, ein Ordner pro Lauf. 0 = sie werden nie entfernt.',
     'What a run replaces or deletes is kept in the folder .versions on the target.': 'Was ein Lauf ersetzt oder löscht, wird im Ordner .versions auf dem Ziel aufbewahrt.',
     'versions': 'Versionen',
+    'The password of the encrypted copies': 'Das Passwort der verschlüsselten Kopien',
+    'The copies of "{name}" are encrypted with this password. It is shown only now.': 'Die Kopien von „{name}“ werden mit diesem Passwort verschlüsselt. Es wird nur jetzt angezeigt.',
+    'Without it nobody reads the copies: not you, and not this system after it was set up anew without its backup. Keep it somewhere outside this system.': 'Ohne es liest niemand die Kopien: Sie nicht, und dieses System nicht, nachdem es ohne seine Sicherung neu aufgesetzt wurde. Bewahren Sie es außerhalb dieses Systems auf.',
+    "To read the copies elsewhere, rclone needs a remote of the type crypt over the folder on the target, with this password and encrypted file and folder names. On this system the password is kept in the addon's settings as rclone keeps it - obscured, not encrypted - and so in the system's backup.": 'Um die Kopien anderswo zu lesen, braucht rclone ein Remote vom Typ crypt über dem Ordner auf dem Ziel, mit diesem Passwort und verschlüsselten Datei- und Ordnernamen. Auf diesem System liegt das Passwort in den Einstellungen des Addons, so wie rclone es ablegt – verschleiert, nicht verschlüsselt – und damit in der Sicherung des Systems.',
+    'I have stored this password outside this system': 'Ich habe dieses Passwort außerhalb dieses Systems aufbewahrt',
+    'Encrypt the copies on the target (contents and names)': 'Die Kopien auf dem Ziel verschlüsseln (Inhalte und Namen)',
+    'Chosen when a job is made and not changed afterwards.': 'Wird beim Anlegen eines Auftrags gewählt und danach nicht mehr geändert.',
+    'The system makes a password and shows it once after saving. Use a folder that is empty.': 'Das System erzeugt ein Passwort und zeigt es nach dem Speichern einmal an. Verwenden Sie einen leeren Ordner.',
+    'The copies on the target are encrypted.': 'Die Kopien auf dem Ziel sind verschlüsselt.',
+    'encrypted': 'verschlüsselt',
 };
 
 export const MESSAGES: Catalogue = Object.fromEntries(Object.entries(DE).map(([en, de]) => [en, {de, en}]));

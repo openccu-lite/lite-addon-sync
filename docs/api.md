@@ -52,7 +52,7 @@ state, text?, checked?, jobs}`. `state`: `not-tested`, `ok`, `unreachable`, `aut
 `hostkey-changed`, `no-rsync`, `read-only`, `error`. The private key is never in an answer.
 
 **`JobSpec`:** `{name, source, read_addon?, target: {kind: "account"|"server", id, folder}, mode: "copy"|"mirror",
-max_delete?, excludes?, name_filters?, bwlimit_kbps?, versions?, versions_days?, schedule: {kind: "manual"|"hourly"|"daily"|"weekly"|"custom",
+max_delete?, excludes?, name_filters?, bwlimit_kbps?, versions?, versions_days?, encrypt?, schedule: {kind: "manual"|"hourly"|"daily"|"weekly"|"custom",
 time?, weekday?}}`. `source` is a folder below `/usr/local` that is not on the *never copied* list; `read_addon` the
 addon whose group the run needs to read it (from the picker's `addon`). `copy` adds and replaces and deletes nothing;
 `mirror` also deletes on the target what is gone from the source, at most `max_delete` files per run (50; 0 = no
@@ -60,7 +60,9 @@ limit). `excludes` are patterns with `*`, `?` and `**` (`*.tmp`, `/cache/**`); `
 out files that look like keys and tokens. `versions` keeps what a run replaces or deletes on the target: it is moved
 into `<folder>/.versions/<the run's time>/` (rsync's `--backup-dir`, rclone's `--backup-dir`), and that folder is
 never part of the copy; `versions_days` removes the folders of runs older than that many days after a run that
-worked (0 = never). There is no field for free options of rsync or rclone.
+worked (0 = never). `encrypt` (an account only, chosen at the creation and not changed afterwards) encrypts the
+copies with rclone's crypt, contents and names: the job gets a crypt remote of its own over its folder and a password
+the system makes. **The answer to `POST /api/v1/jobs` carries it once as `crypt_password`**; no later answer does. There is no field for free options of rsync or rclone.
 
 **`Job`:** the spec with `id`, `created`, `changed`, `needs_dry_run?`, and read from the system: `schedule` (as the
 timer is now; `calendar` for a custom one), `timer: {unit, exists, enabled, next?, last?}`, `target_name`,

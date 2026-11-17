@@ -4,6 +4,7 @@
     // beyond them is the timer's on the system's Services page, which this dialog links and whose
     // edits it leaves alone.
     import {Dialog} from 'occulite-ui';
+    import {copyText} from 'occulite-ui/clipboard';
     import {t} from 'occulite-ui/i18n';
 
     import ConfirmDialog from './ConfirmDialog.svelte';
@@ -25,6 +26,17 @@
     let pickError = $state('');
     let showNever = $state(false);
     let confirmCustom = $state<string[] | null>(null);
+    // an encrypted job's password is answered once, at its creation: shown here until the user
+    // says it is stored somewhere else
+    let secret = $state<{job: Job; password: string} | null>(null);
+    let stored = $state(false);
+    let copied = $state(false);
+    let host = $state<HTMLElement | undefined>();
+    async function copySecret() {
+        if (!secret) return;
+        copied = (await copyText(secret.password, {host})) !== 'failed';
+        setTimeout(() => (copied = false), 2000);
+    }
 
     // the timer as the system has it: a custom one was edited on the Services page
     // svelte-ignore state_referenced_locally
@@ -67,6 +79,7 @@
         const [kind, id] = target.split(':');
         return {
             ...spec,
+            encrypt: kind === 'account' && spec.encrypt,
             name: spec.name.trim(),
             target: {kind: kind ?? '', id: id ?? '', folder: spec.target.folder.trim()},
             excludes: patternsOf(excludes),
@@ -83,8 +96,10 @@
         error = '';
         confirmCustom = null;
         try {
-            const r = job ? await put<Job>(`api/v1/jobs/${job.id}`, body(replace)) : await post<Job>('api/v1/jobs', body(false));
-            ondone(r, !job);
+            const r = job ? await put<Job>(`api/v1/jobs/${job.id}`, body(replace)) : await post<Job & {crypt_password?: string}>('api/v1/jobs', body(false));
+            const pw = (r as {crypt_password?: string}).crypt_password;
+            if (pw) secret = {job: r, password: pw};
+            else ondone(r, !job);
         } catch (e) {
             const b = e instanceof ApiError ? (e.body as {error?: string; calendar?: string[]}) : undefined;
             if (b?.error === 'custom-timer') confirmCustom = b.calendar ?? [];
@@ -95,8 +110,17 @@
     }
 </script>
 
-<Dialog open title={job ? t('Edit the copy job') : t('New copy job')} width="44rem" {onclose} testId="job-dialog">
-    {#if picking}
+<Dialog open title={secret ? t('The password of the encrypted copies') : job ? t('Edit the copy job') : t('New copy job')} width="44rem" closable={!secret} onclose={() => { if (!secret) onclose(); }} testId="job-dialog">
+    {#if secret}
+        <div bind:this={host} data-testid="job-secret">
+            <p>{t('The copies of "{name}" are encrypted with this password. It is shown only now.', {name: secret.job.name})}</p>
+            <pre class="sy-code" data-testid="job-password">{secret.password}</pre>
+            <div class="sy-row"><button class="hmm-button" onclick={() => void copySecret()} data-testid="job-password-copy">{copied ? t('Copied.') : t('Copy')}</button></div>
+            <p class="sy-error">{t('Without it nobody reads the copies: not you, and not this system after it was set up anew without its backup. Keep it somewhere outside this system.')}</p>
+            <p class="sy-help">{t('To read the copies elsewhere, rclone needs a remote of the type crypt over the folder on the target, with this password and encrypted file and folder names. On this system the password is kept in the addon\'s settings as rclone keeps it - obscured, not encrypted - and so in the system\'s backup.')}</p>
+            <label class="sy-check"><input type="checkbox" bind:checked={stored} data-testid="job-password-stored" /> {t('I have stored this password outside this system')}</label>
+        </div>
+    {:else if picking}
         <div class="sy-picker" data-testid="picker">
             <div class="sy-picker-head">
                 <button class="hmm-button" onclick={() => void browse(listing?.parent ?? '')} disabled={!listing?.parent} data-testid="picker-up">{t('Up')}</button>
@@ -169,6 +193,11 @@
                 <p class="sy-help sy-span">{t('A run that would delete more stops and says so. 0 = no limit.')}</p>
             {/if}
 
+            {#if target.startsWith('account:')}
+                <label class="sy-check sy-span"><input type="checkbox" bind:checked={spec.encrypt} disabled={!!job} data-testid="job-encrypt" /> {t('Encrypt the copies on the target (contents and names)')}</label>
+                {#if job}<p class="sy-help sy-span">{t('Chosen when a job is made and not changed afterwards.')}</p>
+                {:else if spec.encrypt}<p class="sy-help sy-span">{t('The system makes a password and shows it once after saving. Use a folder that is empty.')}</p>{/if}
+            {/if}
             <label class="sy-check sy-span"><input type="checkbox" bind:checked={spec.versions} data-testid="job-versions" /> {t('Keep what a run replaces or deletes on the target')}</label>
             {#if spec.versions}
                 <label class="sy-label" for="sy-job-vdays">{t('Remove versions after days')}</label>
@@ -214,7 +243,9 @@
     {/if}
     {#if error}<p class="sy-error" role="alert" data-testid="job-error">{error}</p>{/if}
     {#snippet buttons()}
-        {#if picking}
+        {#if secret}
+            <button class="hmm-button sy-primary" onclick={() => secret && ondone(secret.job, true)} disabled={!stored} data-testid="job-password-done">{t('Done')}</button>
+        {:else if picking}
             <button class="hmm-button" onclick={() => (picking = false)} data-testid="picker-back">{t('Back')}</button>
             <button class="hmm-button sy-primary" onclick={() => listing && choose(listing.self)} disabled={!listing || (listing.self.state !== 'ok' && listing.self.state !== 'addon')} data-testid="picker-choose-this">{t('Choose this folder')}</button>
         {:else}
