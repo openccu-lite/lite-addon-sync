@@ -7,7 +7,13 @@
 # OneDrive, Google Drive and Dropbox themselves cannot be tested here (they need accounts): they are tried by hand
 # before a release that the changelog of rclone says touches them.
 #
-# workflow_dispatch runs it by hand; with dry_run nothing is pushed or released.
+# workflow_dispatch runs it by hand; with dry_run nothing is pushed or released. pretend_current is the workflow's own
+# test: it takes the given older version as the pin, so the bump, the SHA256SUMS lookup and the gate run although
+# upstream has nothing new - always as a dry run.
+#
+# The shape is lite-addon-tailscale's follow-tailscale.yml: one workflow that runs the gate itself on the bumped tree
+# and only then commits, tags and releases - a commit pushed with the workflow's token starts no other workflow, so
+# nothing may depend on ci.yml running afterwards.
 name: follow-rclone
 
 on:
@@ -19,6 +25,10 @@ on:
         description: 'check and gate, but neither push nor release'
         type: boolean
         default: false
+      pretend_current:
+        description: 'test only: take this older rclone version (vX.Y.Z) as the pin; always a dry run'
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -41,10 +51,16 @@ jobs:
       - id: v
         env:
           GH_TOKEN: ${{ github.token }}
+          PRETEND: ${{ inputs.pretend_current }}
         run: |
           set -eu
           . scripts/rclone.pin
           current=$RCLONE_VERSION
+          if [ -n "$PRETEND" ]; then
+            echo "$PRETEND" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "pretend_current: not a version: $PRETEND"; exit 1; }
+            echo "test run: the pin is $current, taken as $PRETEND"
+            current=$PRETEND
+          fi
           latest=$(gh api repos/rclone/rclone/releases --paginate --jq '.[] | select(.prerelease == false and .draft == false) | .tag_name' \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
           echo "current=$current latest=$latest"
@@ -129,7 +145,8 @@ jobs:
           path: .
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          # the Go openccu-lite's image builds its system service with; go.mod names only the minimum
+          go-version: '1.27.2'
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -137,7 +154,8 @@ jobs:
           cache-dependency-path: ui/package-lock.json
       - run: test -z "$(gofmt -l .)"
       - run: go vet ./...
-      - run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+      # pinned, as occulited pins it: @latest follows staticcheck's own Go requirement and went red by itself
+      - run: go run honnef.co/go/tools/cmd/staticcheck@2026.2.2 ./...
       - run: scripts/fetch-rclone.sh x86_64
       - run: go test -race -count=1 ./...
       - run: npm ci --no-audit --no-fund
@@ -163,7 +181,7 @@ jobs:
   release:
     name: commit, tag and release v${{ needs.bump.outputs.version }}
     needs: [check, bump, gate]
-    if: ${{ !inputs.dry_run }}
+    if: ${{ !inputs.dry_run && inputs.pretend_current == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
