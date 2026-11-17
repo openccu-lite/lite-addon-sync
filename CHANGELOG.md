@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.2.0] - 2026-11-17
+
+Copy jobs. For openccu-lite 2.0.0-beta.7 and newer (the first with timers an addon keeps itself).
+
+- **Copy jobs** (the new tab): a folder of the system, copied in one direction to an account (with rclone) or to an
+  SSH server (with rsync). *Copy* adds and replaces and deletes nothing on the target; *Mirror* also deletes there
+  what is gone from the source - at most 50 files per run unless you say otherwise, and only after you have tried
+  the job and looked at what it would do. *Try it* copies nothing and lists what a run would copy and delete.
+  Patterns to leave out, a rate limit, *Run now*, *Stop*.
+- **A simple schedule:** manual only, hourly, daily or weekly. Each job is a timer of the system
+  (`local-sync-<job>`), so the Services page shows it, runs it, and edits its schedule in full; a timer edited
+  there shows here as *custom* and is left alone until you choose to replace it. *Manual only* switches the timer
+  off and keeps it.
+- **What is copied, and what never is.** The folder picker shows the system's own storage. Never offered and never
+  copied: the settings of the system and of every addon (`/usr/local/etc`, with their keys and passwords), backups
+  of the system, temporary files, program files, this addon's own files. Files that look like keys and tokens are
+  left out by default. Another addon's data can be chosen, and the job then reads it with that addon's rights - the
+  dialog says what that opens.
+- **SSH servers** for rsync, beside the accounts: the addon makes a key pair per server and shows the line for the
+  server's `authorized_keys`; there is no password login. The server's host key is read, shown and trusted only
+  after you confirmed it; a run never accepts a host key on the way. rsync and ssh are the system's own.
+- **History:** every run with what it copied, replaced and deleted, its errors, and its file list; the runs are also
+  in the system log under the job's unit.
+- **No more privilege:** a job runs as the addon's user in a unit the system writes (the scope `timers:addon`, not
+  `system:write`); the addon hands over the schedule and nothing else.
+
+Not in it yet: keeping replaced and deleted files as versions, encryption of the copies on the target (rclone crypt),
+a notice for a job that is overdue.
+
 ## [0.1.0] - 2026-11-17
 
 The first version, for openccu-lite 2.0.0-beta.7 and newer (the first with backup targets an addon provides).
@@ -23,4 +52,3 @@ The first version, for openccu-lite 2.0.0-beta.7 and newer (the first with backu
   directory (`0600`) and so in every backup of the system.
 - German and English, light and dark.
 
-Not in it yet: copy jobs for folders of the system (with rsync and a schedule) - the next step.

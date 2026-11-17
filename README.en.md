@@ -2,8 +2,9 @@
 
 *[Deutsch](README.md)*
 
-> **Needs openccu-lite 2.0.0-beta.7 or newer** (the first version in which an addon can provide backup targets). An
-> older system does not install the addon; the manifest names the minimum (`requires.lite`).
+> **Needs openccu-lite 2.0.0-beta.7 or newer** (the first version in which an addon can provide backup targets and
+> keep timers of its own). An older system does not install the addon; the manifest names the minimum
+> (`requires.lite`).
 
 **Cloud storage as a backup target** for an [openccu-lite](https://github.com/openccu-lite/openccu-lite) system:
 connect an account at OneDrive, Google Drive or Dropbox, an S3 bucket or a WebDAV server (Nextcloud), and choose it as
@@ -26,6 +27,30 @@ schedule, the same retention, *Test*, *Back up now*, *Backups here* and *Restore
   the files' names and sizes, the time, and the system's address on the internet.
 - **Nothing before the first account.** Installed, the addon contacts nothing. After that only the account's provider:
   at the login, at a test and when the system hands over a backup. No telemetry, no update check of its own.
+
+## Copy jobs
+
+Beside the backup, the addon copies **a folder of the system** to an account or an SSH server - in one direction, on a
+schedule. That is no backup of the system (which goes through the Backup page) but for data you want somewhere else
+as well: an addon's database, exports, pictures.
+
+- **Source:** a folder below `/usr/local`, chosen in a folder picker. **Never copied** and never offered: the settings
+  of the system and of every addon (`/usr/local/etc`, with their keys and passwords - they leave the system in its
+  backup, encrypted), backups of the system, temporary files, program files. Files that look like keys and tokens
+  (`*.pem`, `*.key`, `id_*`, `*token*` …) are left out by default. Another addon's data can be chosen; the job then
+  reads it with that addon's rights, and the dialog says what that opens.
+- **Target:** an account (with rclone) or an **SSH server** (with rsync). For an SSH server the addon makes a key pair
+  and shows the line for the server's `authorized_keys` (with `restrict`); there is no password login. The server's
+  host key is read, shown and trusted only after you confirmed it - a run never accepts a host key on the way. rsync
+  and ssh are the system's own.
+- **Mode:** *Copy* (new and changed files; nothing is deleted on the target) or *Mirror* (the target becomes the
+  source - at most 50 deletions per run, and only after you have tried the job and looked at what it would do).
+  *Try it* copies nothing and lists what a run would do.
+- **Schedule:** manual only, hourly, daily or weekly. Each job is a timer of the system (`local-sync-<job>`): the
+  **Services** page shows it, runs it and edits its schedule in full. A timer edited there shows here as *custom*
+  and is left alone until you replace it.
+- **History:** every run with what it copied, replaced and deleted, its errors and its file list; the runs are also
+  in the system log under the job's unit.
 
 ## Logging in at OneDrive, Google Drive, Dropbox
 
@@ -73,12 +98,19 @@ best a key that may read and write this bucket and nothing else. **WebDAV / Next
   backup of the system. Passwords there are obscured, not encrypted (that is how rclone stores them). Encrypted
   backups protect them; the addon's API never returns a secret.
 - rclone is the release binary from [rclone.org](https://rclone.org/downloads/), checked against a pinned SHA-256 at
-  build time (`scripts/rclone.pin`). A workflow follows rclone's releases.
+  build time (`scripts/rclone.pin`). A workflow follows rclone's releases and publishes a new version of the addon
+  for each.
+- **Copy jobs** do not run in the addon's service but each in a unit of the system of its own, as the addon's user
+  and with no privilege. The addon holds the scope `timers:addon` for that: it hands the system the schedule; what
+  the unit runs (`lite-sync run <job>` from the root-owned program directory) the system writes itself. The addon
+  does not hold `system:write`. There is no field for free options of rsync or rclone.
+- **The SSH servers' keys** are in `/usr/local/etc/config/addons/sync/ssh/` (`0600`), in every backup of the system
+  as well.
 
 ## Not in it yet
 
-Copy jobs for folders of the system (with rsync, a simple schedule, and the Services page for everything beyond it)
-are the next step.
+Keeping replaced and deleted files as versions, encrypting the copies on the target (rclone crypt), a notice for a job
+that is overdue.
 
 ## Developing
 

@@ -157,7 +157,9 @@ jobs:
       # pinned, as occulited pins it: @latest follows staticcheck's own Go requirement and went red by itself
       - run: go run honnef.co/go/tools/cmd/staticcheck@2026.2.2 ./...
       - run: scripts/fetch-rclone.sh x86_64
-      - run: go test -race -count=1 ./...
+      # the copy jobs' rsync runs against an sshd started by the test as this user: both must be here
+      - run: sudo mkdir -p /run/sshd && rsync --version | head -1 && test -x /usr/sbin/sshd
+      - run: SYNC_REQUIRE_RSYNC=1 go test -race -count=1 ./...
       - run: npm ci --no-audit --no-fund
         working-directory: ui
       - run: npm run check

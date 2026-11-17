@@ -557,3 +557,18 @@ func (r *Runner) ConfigRename(ctx context.Context, from, to string) error {
 	}
 	return os.Rename(tmp, r.Config)
 }
+
+// JobCommand is an rclone call for a copy job's run: the addon's configuration and limits as every
+// call has them, but two transfers, lines as JSON on stderr (one per file and a figure line every
+// few seconds), and the output left to the caller to read while it runs.
+func (r *Runner) JobCommand(ctx context.Context, args ...string) *exec.Cmd {
+	_ = os.MkdirAll(filepath.Join(r.Home, "tmp"), 0o700)
+	base := []string{"--retries", "1", "--low-level-retries", "3", "--contimeout", "15s", "--timeout", "2m",
+		"--transfers", "2", "--checkers", "4", "--buffer-size", "4M", "--use-mmap",
+		"--use-json-log", "--log-level", "INFO", "--stats", "5s", "--stats-log-level", "NOTICE"}
+	c := exec.CommandContext(ctx, r.Bin, append(base, args...)...)
+	c.Env = r.env()
+	c.Dir = r.Home
+	c.WaitDelay = 10 * time.Second
+	return c
+}

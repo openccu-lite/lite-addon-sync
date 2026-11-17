@@ -38,16 +38,21 @@ type manifest struct {
 		} `json:"targets"`
 	} `json:"backup"`
 	Runtime struct {
-		Root         bool              `json:"root"`
-		Daemon       bool              `json:"daemon"`
-		Needs        *[]string         `json:"needs"`
-		Capabilities []string          `json:"capabilities"`
-		Groups       []string          `json:"groups"`
-		Ports        []int             `json:"ports"`
-		Paths        []string          `json:"paths"`
-		Bin          string            `json:"bin"`
-		APIScopes    []string          `json:"api_scopes"`
-		Note         map[string]string `json:"note"`
+		Root         bool      `json:"root"`
+		Daemon       bool      `json:"daemon"`
+		Needs        *[]string `json:"needs"`
+		Capabilities []string  `json:"capabilities"`
+		Groups       []string  `json:"groups"`
+		Ports        []int     `json:"ports"`
+		Paths        []string  `json:"paths"`
+		Bin          string    `json:"bin"`
+		Timers       *struct {
+			Exec string   `json:"exec"`
+			Args []string `json:"args"`
+		} `json:"timers"`
+		ReadAddonData bool              `json:"read_addon_data"`
+		APIScopes     []string          `json:"api_scopes"`
+		Note          map[string]string `json:"note"`
 	} `json:"runtime"`
 }
 
@@ -87,8 +92,14 @@ func TestManifest(t *testing.T) {
 	if rt.Root || len(rt.Capabilities) != 0 || len(rt.Groups) != 0 || len(rt.Ports) != 0 || len(rt.Paths) != 0 {
 		t.Errorf("the addon needs no privilege and no port: %+v", rt)
 	}
-	if len(rt.APIScopes) != 1 || rt.APIScopes[0] != "system:read" {
-		t.Errorf("scopes %v: system:read alone", rt.APIScopes)
+	// system:read for what the page shows of the system, timers:addon for the copy jobs' own
+	// timers - never system:write, with which a timer is a root unit
+	if strings.Join(rt.APIScopes, ",") != "system:read,timers:addon" {
+		t.Errorf("scopes %v: system:read and timers:addon, nothing else", rt.APIScopes)
+	}
+	// the system renders a job's unit as `<bin>/lite-sync run <job>`: the runner's command line
+	if rt.Timers == nil || rt.Timers.Exec != "lite-sync" || strings.Join(rt.Timers.Args, " ") != "run" || !rt.ReadAddonData {
+		t.Errorf("runtime.timers %+v, read_addon_data %v", rt.Timers, rt.ReadAddonData)
 	}
 	if rt.Needs == nil || len(*rt.Needs) != 0 {
 		t.Error("needs: [] - the addon waits for no interface process")
@@ -109,7 +120,7 @@ func TestManifest(t *testing.T) {
 	if m.Description["de"] == "" || m.Description["en"] == "" || rt.Note["de"] == "" || rt.Note["en"] == "" {
 		t.Error("the description and the note in both languages")
 	}
-	for _, want := range []string{"Contacts nothing until", "encrypted", "system:read", "socket"} {
+	for _, want := range []string{"Contacts nothing until", "encrypted", "system:read", "socket", "timers:addon", "never the settings", "that addon's group", "host key"} {
 		if !strings.Contains(rt.Note["en"], want) {
 			t.Errorf("the note does not say %q", want)
 		}

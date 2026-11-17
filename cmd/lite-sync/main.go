@@ -25,24 +25,61 @@ import (
 
 	"github.com/openccu-lite/lite-addon-sync/internal/accounts"
 	"github.com/openccu-lite/lite-addon-sync/internal/httpapi"
+	"github.com/openccu-lite/lite-addon-sync/internal/jobs"
 	"github.com/openccu-lite/lite-addon-sync/internal/notices"
 	"github.com/openccu-lite/lite-addon-sync/internal/provider"
 	"github.com/openccu-lite/lite-addon-sync/internal/rclone"
+	"github.com/openccu-lite/lite-addon-sync/internal/servers"
 	"github.com/openccu-lite/lite-addon-sync/internal/sysinfo"
+	"github.com/openccu-lite/lite-addon-sync/internal/systimers"
 )
 
 // version is set by the build (-ldflags "-X main.version=…").
 var version = "dev"
 
 type options struct {
-	addonDir, confDir, id, base, basePath, www, rcloneBin, socket, tokenFile, oauthExtra, noticesURL string
-	port                                                                                             int
-	noSession, anyPeer                                                                               bool
+	addonDir, confDir, id, base, basePath, www, rcloneBin, socket, tokenFile, oauthExtra, noticesURL, runDir string
+	port                                                                                                     int
+	noSession, anyPeer                                                                                       bool
+}
+
+// envOr answers an environment variable, or def when it is not set. The variables place a copy
+// job's run in a test: on the system the unit's command line is fixed (`lite-sync run <job>`).
+func envOr(name, def string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return def
+}
+
+// runJob is `lite-sync run <job>`: one run of a copy job, as the job's unit on the system starts
+// it. It exits 0 only when the run succeeded, so a failed run is a failed unit.
+func runJob(id string) int {
+	logf := func(format string, args ...any) { log.Printf("sync: "+format, args...) }
+	jobs.Root = envOr("SYNC_ROOT", jobs.Root)
+	addonDir := envOr("SYNC_ADDON_DIR", "/usr/local/addons/sync")
+	confDir := envOr("SYNC_CONF_DIR", "/usr/local/etc/config/addons/sync")
+	home := filepath.Join(addonDir, "var")
+	_ = os.MkdirAll(home, 0o700)
+	rc := &rclone.Runner{Bin: envOr("SYNC_RCLONE", filepath.Join(addonDir, "bin", "rclone")), Config: filepath.Join(confDir, "rclone.conf"), Home: home, Log: nil}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	_, err := jobs.Run(ctx, jobs.Env{AddonDir: addonDir, ConfDir: confDir, RunDir: envOr("SYNC_RUN_DIR", jobs.DefaultRunDir()), Rclone: rc, Log: logf}, id)
+	os.Stdout.Sync()
+	if err != nil {
+		logf("%v", err)
+		return 1
+	}
+	return 0
 }
 
 func main() {
 	log.SetFlags(0) // the journal adds the time
+	if len(os.Args) == 3 && os.Args[1] == "run" {
+		os.Exit(runJob(os.Args[2]))
+	}
 	var o options
+	jobs.Root = envOr("SYNC_ROOT", jobs.Root) // tests only: another storage than /usr/local
 	flag.StringVar(&o.addonDir, "addon-dir", "/usr/local/addons/sync", "the addon's directory (app/, bin/, var/)")
 	flag.StringVar(&o.confDir, "conf-dir", "/usr/local/etc/config/addons/sync", "the configuration's directory (accounts.json, rclone.conf; mode 0700)")
 	flag.StringVar(&o.id, "id", "sync", "the addon id (token file, base path)")
@@ -56,6 +93,7 @@ func main() {
 	flag.BoolVar(&o.noSession, "no-session-check", false, "serve the page without the session check (development only)")
 	flag.BoolVar(&o.anyPeer, "any-peer", false, "serve the provider's socket to this process's own user too (tests only)")
 	flag.StringVar(&o.oauthExtra, "oauth-extra", "", "extra rclone options for a login, as JSON (tests only: the provider's addresses)")
+	flag.StringVar(&o.runDir, "run-dir", jobs.DefaultRunDir(), "the runtime directory: a running copy job's progress, the run lock")
 	flag.StringVar(&o.noticesURL, "notices", "http://127.0.0.1:8183", "the system service's loopback address for the addon's notices on the Status page (empty: none)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
@@ -158,6 +196,19 @@ func run(o options) error {
 	}
 	facts := &sysinfo.Client{Base: o.base, HTTP: &http.Client{Transport: &addonkit.AuthTransport{Source: token}, Timeout: 30 * time.Second}, AddonID: o.id}
 
+	// the copy jobs: their records, the SSH servers, and the system's timers that run them
+	srvStore, err := servers.Open(o.confDir, servers.Tools{}, home)
+	if err != nil {
+		return err
+	}
+	srvStore.Log = logf
+	jobStore, err := jobs.Open(o.confDir)
+	if err != nil {
+		return err
+	}
+	_ = os.MkdirAll(o.runDir, 0o700)
+	timers := &systimers.Client{Base: o.base, HTTP: &http.Client{Transport: &addonkit.AuthTransport{Source: token}, Timeout: 90 * time.Second}}
+
 	wrap := func(h http.Handler) http.Handler { return h }
 	if !o.noSession {
 		c := addonkit.NewChecker(addonkit.SessionOptions{Base: o.base, Need: addonkit.LevelAdmin, AddonID: o.id, OnRefused: func(r *http.Request, reason string) {
@@ -166,6 +217,7 @@ func run(o options) error {
 		wrap = c.Handler
 	}
 	h := httpapi.New(httpapi.Options{BasePath: o.basePath, WWW: o.www, Accounts: store, Flows: flows, Facts: facts, Wrap: wrap, Version: version, Rclone: rcloneVersion, Started: time.Now(),
+		Servers: srvStore, Jobs: jobStore, Timers: timers, AddonID: o.id, AddonDir: o.addonDir, RunDir: o.runDir, Log: logf,
 		Provider: func() (bool, string) {
 			pmu.Lock()
 			defer pmu.Unlock()
@@ -182,7 +234,7 @@ func run(o options) error {
 		defer cancel()
 		_ = srv.Shutdown(sctx)
 	}()
-	logf("%s (rclone %s): serving %s on %s; %d accounts; the backup provider on %s: %v", version, rcloneVersion, o.basePath, l.Addr(), len(store.List()), o.socket, providerOK)
+	logf("%s (rclone %s): serving %s on %s; %d accounts, %d SSH servers, %d copy jobs; the backup provider on %s: %v", version, rcloneVersion, o.basePath, l.Addr(), len(store.List()), len(srvStore.List()), len(jobStore.List()), o.socket, providerOK)
 	serr := make(chan error, 1)
 	go func() { serr <- srv.Serve(l) }()
 	select {

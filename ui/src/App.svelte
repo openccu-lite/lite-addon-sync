@@ -2,13 +2,16 @@
     // The page: the accounts - connect, test, log in again, edit, remove - and where each is used.
     // The system's backup is set up on the Backup page; this page says so and leads there.
     import {onMount} from 'svelte';
-    import {Dialog, Notices, ThemeSwitch} from 'occulite-ui';
+    import {Dialog, Notices, Tabs, ThemeSwitch} from 'occulite-ui';
     import {i18n, t} from 'occulite-ui/i18n';
     import {NoticesStore} from 'occulite-ui/notices';
     import {cycleTheme, theme} from 'occulite-ui/theme';
 
     import ConfirmDialog from './ConfirmDialog.svelte';
     import ConnectDialog from './ConnectDialog.svelte';
+    import History from './History.svelte';
+    import Jobs from './Jobs.svelte';
+    import Servers from './Servers.svelte';
     import {ApiError, del, get, post, put} from './api.js';
     import {PILLS, formatBytes, pillClass, pillOf, useForBackupsHref, type Account, type State, type Target} from './model.js';
 
@@ -22,6 +25,18 @@
     let editName = $state('');
     let editLimit = $state(0);
     let removing = $state<{account: Account; targets: Target[]} | null>(null);
+    // the tabs: Accounts (with the SSH servers), Copy jobs, History; the address's #… names one
+    const TABS = ['accounts', 'jobs', 'history'];
+    const fromHash = () => {
+        const h = location.hash.replace('#', '');
+        return h === 'servers' ? 'accounts' : TABS.includes(h) ? h : 'accounts';
+    };
+    let tab = $state(fromHash());
+    let tick = $state(0);
+    function selectTab(id: string) {
+        tab = id;
+        history.replaceState(null, '', '#' + id);
+    }
 
     async function load(refresh = false) {
         try {
@@ -35,8 +50,18 @@
     onMount(() => {
         // opening the page is a look at the system as it is now, not at an answer a few seconds old
         void load(true);
-        const poll = setInterval(() => void load(), 10000);
-        return () => clearInterval(poll);
+        // every 10 s, and every 2 s while a copy job runs, so its figures move
+        let n = 0;
+        const poll = setInterval(() => {
+            n++;
+            if (n % 5 === 0 || view?.copy?.jobs.some((j) => j.running)) void load().then(() => tick++);
+        }, 2000);
+        const onHash = () => (tab = fromHash());
+        window.addEventListener('hashchange', onHash);
+        return () => {
+            clearInterval(poll);
+            window.removeEventListener('hashchange', onHash);
+        };
     });
 
     const oauthKinds = $derived((view?.kinds ?? []).filter((k) => k.oauth).map((k) => k.id));
@@ -93,10 +118,14 @@
             notices.push('info', t('{name} was removed. Nothing in the account itself was deleted.', {name: a.name}));
             await load(true);
         } catch (e) {
-            // a backup target uses the account: the question names it, and asks again
-            const body = e instanceof ApiError ? (e.body as {error?: string; targets?: Target[]}) : undefined;
+            // a backup target uses the account: the question names it, and asks again; a copy job
+            // that copies to it is deleted first
+            const body = e instanceof ApiError ? (e.body as {error?: string; targets?: Target[]; jobs?: string[]}) : undefined;
             if (body?.error === 'in-use' && body.targets) removing = {account: a, targets: body.targets};
-            else notices.push('error', (e as Error).message);
+            else if (body?.error === 'in-use' && body.jobs) {
+                removing = null;
+                notices.push('error', t('A copy job copies to this account: delete the job first ({names}).', {names: body.jobs.join(', ')}));
+            } else notices.push('error', (e as Error).message);
         } finally {
             busy = '';
         }
@@ -135,13 +164,15 @@
         {/if}
     </div>
     <main class="sy-page">
+        <Tabs tabs={[{id: 'accounts', label: t('Accounts')}, {id: 'jobs', label: t('Copy jobs'), badge: view?.copy?.jobs.length || undefined}, {id: 'history', label: t('History')}]} active={tab} onselect={selectTab} testId="tabs" />
+        {#if tab === 'accounts'}
         <section class="sy-section" id="accounts">
             <div class="sy-section-head">
                 <h2>{t('Accounts')}</h2>
                 <button class="hmm-button sy-primary" onclick={() => (connect = {})} disabled={!view} data-testid="connect">{t('Connect an account…')}</button>
             </div>
             <p class="sy-lead">
-                {t("Accounts are used by the system's backup: connect one here, then choose it as a target on the Backup page. Schedule, the number of backups to keep and the restore are set there.")}
+                {t("Accounts are used by the system's backup and by copy jobs. For backups, connect one here, then choose it as a target on the Backup page. Schedule, the number of backups to keep and the restore are set there.")}
                 <a href="/backup#targets" target="_top" data-testid="backup-link">{t('Backup page')}</a>
             </p>
             {#if view}
@@ -170,6 +201,7 @@
                                 {:else}
                                     <div class="sy-muted" data-testid="unused">{t('Not used by a backup target yet.')}</div>
                                 {/if}
+                                {#if a.jobs?.length}<div data-testid="used-by-jobs">{t('Used by the copy job {names}.', {names: a.jobs.map((n) => `"${n}"`).join(', ')})}</div>{/if}
                                 <div class="sy-muted">
                                     {a.upload_limit_kbps > 0 ? t('Upload limit: {n} KiB/s', {n: a.upload_limit_kbps}) : t('Upload limit: none')}{#if a.total_bytes}{' · '}{t('{free} free of {total}', {free: formatBytes(a.free_bytes) || '0 MB', total: formatBytes(a.total_bytes)})}{/if}
                                 </div>
@@ -191,6 +223,12 @@
                 <p class="sy-muted">{t('Loading…')}</p>
             {/if}
         </section>
+        {#if view}<Servers servers={view.servers ?? []} {notices} onchange={() => void load(true)} />{/if}
+        {:else if tab === 'jobs'}
+            {#if view}<Jobs {view} {notices} onchange={() => void load(true)} />{:else if !loadError}<p class="sy-muted">{t('Loading…')}</p>{/if}
+        {:else}
+            <History {tick} />
+        {/if}
     </main>
     <Notices notices={notices.visible} ondismiss={(id) => notices.dismiss(id)} />
 </div>

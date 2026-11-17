@@ -12,8 +12,12 @@ import (
 	"time"
 
 	"github.com/openccu-lite/lite-addon-sync/internal/accounts"
+	"github.com/openccu-lite/lite-addon-sync/internal/fakesys"
+	"github.com/openccu-lite/lite-addon-sync/internal/jobs"
 	"github.com/openccu-lite/lite-addon-sync/internal/rclone"
+	"github.com/openccu-lite/lite-addon-sync/internal/servers"
 	"github.com/openccu-lite/lite-addon-sync/internal/sysinfo"
+	"github.com/openccu-lite/lite-addon-sync/internal/systimers"
 )
 
 type fakeFacts struct{ f sysinfo.Facts }
@@ -33,11 +37,48 @@ func rig(t *testing.T) (*httptest.Server, *fakeFacts) {
 		t.Fatal(err)
 	}
 	facts := &fakeFacts{f: sysinfo.Facts{Reachable: true, Provider: true, Encryption: true, Targets: map[string][]sysinfo.Target{"aone000001": {{ID: "t1", Name: "OneDrive"}}}}}
+	ts, _ := rigWith(t, dir, store, facts)
+	return ts, facts
+}
+
+// jobRig is what the copy jobs' tests reach besides the server: the fake system with the addon's
+// timers, the stores, and the directories.
+type jobRig struct {
+	sys      *fakesys.Server
+	jobs     *jobs.Store
+	servers  *servers.Store
+	addonDir string
+	runDir   string
+	ran      []string
+}
+
+func rigWith(t *testing.T, dir string, store *accounts.Store, facts *fakeFacts) (*httptest.Server, *jobRig) {
+	t.Helper()
+	jr := &jobRig{sys: fakesys.New("tok"), addonDir: filepath.Join(dir, "addon"), runDir: filepath.Join(dir, "run")}
+	jr.sys.RunJob = func(name string) { jr.ran = append(jr.ran, name) }
+	sys := httptest.NewServer(jr.sys.Handler())
+	t.Cleanup(sys.Close)
+	var err error
+	if jr.servers, err = servers.Open(dir, servers.Tools{}, dir); err != nil {
+		t.Fatal(err)
+	}
+	if jr.jobs, err = jobs.Open(dir); err != nil {
+		t.Fatal(err)
+	}
+	timers := &systimers.Client{Base: sys.URL, HTTP: &http.Client{Transport: bearer("tok")}}
 	h := New(Options{BasePath: "/addons/sync", WWW: t.TempDir(), Accounts: store, Flows: &accounts.Flows{Bin: filepath.Join(dir, "no-rclone")}, Facts: facts, Version: "test", Rclone: "v1.76.0", Started: time.Now(),
-		Provider: func() (bool, string) { return true, "" }})
+		Provider: func() (bool, string) { return true, "" }, Servers: jr.servers, Jobs: jr.jobs, Timers: timers, AddonDir: jr.addonDir, RunDir: jr.runDir})
 	ts := httptest.NewServer(h)
 	t.Cleanup(ts.Close)
-	return ts, facts
+	return ts, jr
+}
+
+type bearer string
+
+func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer "+string(b))
+	return http.DefaultTransport.RoundTrip(r)
 }
 
 func call(t *testing.T, method, url, body string, csrf bool) (int, string) {

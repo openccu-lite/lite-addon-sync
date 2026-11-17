@@ -3,8 +3,8 @@
 *[English](README.en.md)*
 
 > **Benötigt openccu-lite 2.0.0-beta.7 oder neuer** (die erste Version, in der ein Addon Sicherungsziele bereitstellen
-> kann). Auf einem älteren System lässt sich das Addon nicht installieren; das Manifest nennt die Mindestversion
-> (`requires.lite`).
+> und eigene Timer halten kann). Auf einem älteren System lässt sich das Addon nicht installieren; das Manifest nennt
+> die Mindestversion (`requires.lite`).
 
 **Cloud-Speicher als Sicherungsziel** für ein [openccu-lite](https://github.com/openccu-lite/openccu-lite)-System:
 Verbinden Sie ein Konto bei OneDrive, Google Drive oder Dropbox, einen S3-Bucket oder einen WebDAV-Server (Nextcloud),
@@ -31,6 +31,31 @@ System-Images ist.
   des Systems.
 - **Nichts vor dem ersten Konto.** Installiert kontaktiert das Addon nichts. Danach nur den Anbieter des Kontos: bei der
   Anmeldung, beim Test und wenn das System eine Sicherung übergibt. Keine Telemetrie, keine eigene Update-Prüfung.
+
+## Kopieraufträge
+
+Neben der Sicherung kopiert das Addon **einen Ordner des Systems** in ein Konto oder auf einen SSH-Server – in eine
+Richtung, nach Zeitplan. Das ist keine Sicherung des Systems (die läuft über die Seite Sicherung), sondern für Daten,
+die Sie zusätzlich woanders haben möchten: die Datenbank eines Addons, Exporte, Bilder.
+
+- **Quelle:** ein Ordner unter `/usr/local`, gewählt in einer Ordnerauswahl. **Nie kopiert** und nie angeboten: die
+  Einstellungen des Systems und aller Addons (`/usr/local/etc`, mit ihren Schlüsseln und Passwörtern – sie verlassen
+  das System in seiner Sicherung, verschlüsselt), Sicherungen des Systems, temporäre Dateien, Programmdateien.
+  Dateien, die wie Schlüssel und Tokens aussehen (`*.pem`, `*.key`, `id_*`, `*token*` …), bleiben standardmäßig aus.
+  Die Daten eines anderen Addons lassen sich wählen; der Auftrag liest sie dann mit den Rechten jenes Addons, und der
+  Dialog sagt, was das öffnet.
+- **Ziel:** ein Konto (mit rclone) oder ein **SSH-Server** (mit rsync). Für einen SSH-Server erzeugt das Addon ein
+  Schlüsselpaar und zeigt die Zeile für die `authorized_keys` des Servers (mit `restrict`); eine Anmeldung mit Passwort
+  gibt es nicht. Der Hostschlüssel des Servers wird gelesen, angezeigt und erst nach Ihrer Bestätigung vertraut – ein
+  Lauf nimmt nie unterwegs einen Hostschlüssel an. rsync und ssh sind die des Systems.
+- **Modus:** *Kopieren* (neue und geänderte Dateien; auf dem Ziel wird nichts gelöscht) oder *Spiegeln* (das Ziel wird
+  wie die Quelle – höchstens 50 Löschungen pro Lauf, und erst, nachdem Sie den Auftrag ausprobiert und sich angesehen
+  haben, was er tun würde). *Ausprobieren* kopiert nichts und listet auf, was ein Lauf täte.
+- **Zeitplan:** nur manuell, stündlich, täglich oder wöchentlich. Jeder Auftrag ist ein Timer des Systems
+  (`local-sync-<auftrag>`): Die Seite **Dienste** zeigt ihn, startet ihn und bearbeitet seinen Zeitplan vollständig.
+  Ein dort bearbeiteter Timer erscheint hier als *benutzerdefiniert* und bleibt unangetastet, bis Sie ihn ersetzen.
+- **Verlauf:** jeder Lauf mit dem, was er kopiert, ersetzt und gelöscht hat, seinen Fehlern und seiner Dateiliste;
+  die Läufe stehen auch im Protokoll des Systems unter der Unit des Auftrags.
 
 ## Anmelden bei OneDrive, Google Drive, Dropbox
 
@@ -78,12 +103,19 @@ Adresse (`https://…/remote.php/dav/files/<name>`), Benutzer und ein **App-Pass
   damit in jeder Sicherung des Systems. Passwörter sind dort nur verschleiert, nicht verschlüsselt (so speichert rclone
   sie). Verschlüsselte Sicherungen schützen sie; die API des Addons gibt nie ein Geheimnis zurück.
 - rclone ist das Release-Binary von [rclone.org](https://rclone.org/downloads/), beim Bau gegen eine festgeschriebene
-  SHA-256 geprüft (`scripts/rclone.pin`). Ein Workflow folgt den rclone-Releases.
+  SHA-256 geprüft (`scripts/rclone.pin`). Ein Workflow folgt den rclone-Releases und veröffentlicht für jedes eine neue
+  Version des Addons.
+- **Kopieraufträge** laufen nicht im Dienst des Addons, sondern jeder in einer eigenen Unit des Systems, als Benutzer
+  des Addons und ohne Zusatzrecht. Das Addon hält dafür das Recht `timers:addon`: Es übergibt dem System den Zeitplan;
+  was die Unit ausführt (`lite-sync run <auftrag>` aus dem root-eigenen Programmverzeichnis), schreibt das System
+  selbst. Das Addon hat nicht `system:write`. Es gibt kein Feld für freie Optionen von rsync oder rclone.
+- **Die Schlüssel der SSH-Server** liegen in `/usr/local/etc/config/addons/sync/ssh/` (`0600`), ebenfalls in jeder
+  Sicherung des Systems.
 
 ## Noch nicht enthalten
 
-Kopieraufträge für Ordner des Systems (mit rsync, einem einfachen Zeitplan und der Seite Dienste für alles Weitere)
-sind der nächste Schritt.
+Ersetzte und gelöschte Dateien als Versionen aufbewahren, die Kopien auf dem Ziel verschlüsseln (rclone crypt), ein
+Hinweis bei einem überfälligen Auftrag.
 
 ## Entwickeln
 

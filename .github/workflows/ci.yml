@@ -26,7 +26,9 @@ jobs:
       # the pinned rclone, checked against its SHA-256: test/e2e runs it against rclone's own WebDAV
       # server and a stand-in OAuth provider (no cloud account)
       - run: scripts/fetch-rclone.sh x86_64
-      - run: go test -race -count=1 ./...
+      # the copy jobs' rsync runs against an sshd started by the test as this user: both must be here
+      - run: sudo mkdir -p /run/sshd && rsync --version | head -1 && test -x /usr/sbin/sshd
+      - run: SYNC_REQUIRE_RSYNC=1 go test -race -count=1 ./...
       - run: CGO_ENABLED=0 go build -trimpath -o /tmp/lite-sync ./cmd/lite-sync && /tmp/lite-sync -version
 
   ui:

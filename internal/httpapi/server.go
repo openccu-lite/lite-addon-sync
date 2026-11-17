@@ -17,7 +17,9 @@ import (
 	"github.com/hobbyquaker/ccu-addon-kit/go/addonkit"
 
 	"github.com/openccu-lite/lite-addon-sync/internal/accounts"
+	"github.com/openccu-lite/lite-addon-sync/internal/jobs"
 	"github.com/openccu-lite/lite-addon-sync/internal/rclone"
+	"github.com/openccu-lite/lite-addon-sync/internal/servers"
 	"github.com/openccu-lite/lite-addon-sync/internal/sysinfo"
 )
 
@@ -43,6 +45,16 @@ type Options struct {
 	Started time.Time
 	// Provider says whether the backup provider's socket is being served, and why not.
 	Provider func() (ok bool, problem string)
+	// Servers, Jobs and Timers are the copy jobs' side: the SSH servers, the jobs' records, and the
+	// system's timers. AddonDir holds the history (var/runs), RunDir a running job's progress.
+	Servers  *servers.Store
+	Jobs     *jobs.Store
+	Timers   TimersAPI
+	AddonID  string
+	AddonDir string
+	RunDir   string
+	// Log writes a line to the journal; nil = none.
+	Log func(format string, args ...any)
 }
 
 // Routes lists every "METHOD /path" the API serves; the documentation is held to it by a test.
@@ -58,6 +70,12 @@ func handle(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
 // New builds the handler.
 func New(o Options) http.Handler {
 	o.BasePath = strings.TrimRight(o.BasePath, "/")
+	if o.Log == nil {
+		o.Log = func(string, ...any) {}
+	}
+	if o.AddonID == "" {
+		o.AddonID = "sync"
+	}
 	s := &server{o: o}
 	Routes = nil
 	api := http.NewServeMux()
@@ -71,6 +89,7 @@ func New(o Options) http.Handler {
 	handle(api, "POST /api/v1/login", s.loginStart)
 	handle(api, "POST /api/v1/login/finish", s.loginFinish)
 	handle(api, "DELETE /api/v1/login", s.loginCancel)
+	s.registerJobs(api)
 	api.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		addonkit.WriteError(w, http.StatusNotFound, "not-found", r.URL.Path)
 	})
@@ -152,6 +171,8 @@ type KindView struct {
 type AccountView struct {
 	accounts.Account
 	UsedBy []sysinfo.Target `json:"used_by"`
+	// Jobs are the names of the copy jobs that copy to the account.
+	Jobs []string `json:"jobs"`
 }
 
 // LoginView is the login that waits for its paste.
@@ -173,6 +194,9 @@ type StateView struct {
 	Provider        bool   `json:"provider"`
 	ProviderProblem string `json:"provider_problem,omitempty"`
 	Now             int64  `json:"now"`
+	// Servers are the SSH servers copy jobs send to with rsync; Copy the copy jobs.
+	Servers []ServerView `json:"servers"`
+	Copy    JobsView     `json:"copy"`
 }
 
 func (s *server) view(ctx context.Context, fresh bool) StateView {
@@ -186,8 +210,13 @@ func (s *server) view(ctx context.Context, fresh bool) StateView {
 		if used == nil {
 			used = []sysinfo.Target{}
 		}
-		v.Accounts = append(v.Accounts, AccountView{Account: a, UsedBy: used})
+		v.Accounts = append(v.Accounts, AccountView{Account: a, UsedBy: used, Jobs: jobNames(s.o.Jobs.UsesTarget(jobs.TargetAccount, a.ID))})
 	}
+	v.Servers = []ServerView{}
+	for _, sv := range s.o.Servers.List() {
+		v.Servers = append(v.Servers, s.serverView(sv))
+	}
+	v.Copy = s.jobsView(ctx)
 	if f := s.o.Flows.Pending(); f != nil {
 		v.Login = &LoginView{ID: f.ID, URL: f.URL, Expires: f.Expires}
 	}
@@ -206,7 +235,7 @@ func (s *server) one(ctx context.Context, a accounts.Account) AccountView {
 	if used == nil {
 		used = []sysinfo.Target{}
 	}
-	return AccountView{Account: a, UsedBy: used}
+	return AccountView{Account: a, UsedBy: used, Jobs: jobNames(s.o.Jobs.UsesTarget(jobs.TargetAccount, a.ID))}
 }
 
 // create is POST /api/v1/accounts: an account that needs no login in a browser (S3, WebDAV, Google
@@ -278,6 +307,10 @@ func (s *server) remove(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if _, ok := s.o.Accounts.Get(id); !ok {
 		writeErr(w, accounts.ErrNotFound)
+		return
+	}
+	if used := s.o.Jobs.UsesTarget(jobs.TargetAccount, id); len(used) > 0 {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "in-use", "message": "a copy job copies to this account: delete the job first", "jobs": jobNames(used)})
 		return
 	}
 	if used := s.o.Facts.Facts(r.Context(), true).Targets[id]; len(used) > 0 && r.URL.Query().Get("force") != "1" {

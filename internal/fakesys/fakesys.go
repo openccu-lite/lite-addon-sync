@@ -22,11 +22,60 @@ type Server struct {
 	Provider   bool
 	// Used maps an account id to the name of the backup target that uses it.
 	Used map[string]string
+	// Timers: the system offers timers to the addon (false: an older system, 404). The timers are
+	// kept in memory; RunJob is called for a timer's "run" (the tests start the addon's runner).
+	Timers   bool
+	Readable []string
+	RunJob   func(name string)
+	StopJob  func(name string)
+	timers   map[string]*FakeTimer
+}
+
+// FakeTimer is one of the addon's timers in the fake.
+type FakeTimer struct {
+	Name        string   `json:"name"`
+	Unit        string   `json:"unit"`
+	Service     string   `json:"service"`
+	TimerFile   string   `json:"timer_file"`
+	ServiceFile string   `json:"service_file"`
+	Enabled     bool     `json:"enabled"`
+	Description string   `json:"description"`
+	Read        []string `json:"read"`
+	Addon       string   `json:"addon"`
+}
+
+// Timer answers a copy of the addon's timer of that name.
+func (s *Server) Timer(name string) (FakeTimer, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.timers[name]
+	if !ok {
+		return FakeTimer{}, false
+	}
+	return *t, true
+}
+
+// EditTimer changes a timer as a person on the Services page would; false when there is none.
+func (s *Server) EditTimer(name string, f func(*FakeTimer)) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.timers[name]
+	if ok {
+		f(t)
+	}
+	return ok
+}
+
+// DropTimer deletes a timer as the Services page would.
+func (s *Server) DropTimer(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.timers, name)
 }
 
 // New makes a fake that accepts the token.
 func New(token string) *Server {
-	return &Server{Token: token, Encryption: true, Provider: true, Used: map[string]string{}}
+	return &Server{Token: token, Encryption: true, Provider: true, Used: map[string]string{}, Timers: true, Readable: []string{}, timers: map[string]*FakeTimer{}}
 }
 
 // Set changes the fake's state under its lock.
@@ -63,6 +112,140 @@ func (s *Server) Handler() http.Handler {
 		}
 		writeJSON(w, 200, map[string]any{"encryption": s.Encryption, "hostname": "ccu", "targets": targets, "providers": providers})
 	})
+	// the addon's own timers (openccu-lite's scope timers:addon), in memory
+	timerRoute := func(pattern string, h func(w http.ResponseWriter, r *http.Request, name string)) {
+		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+			if !s.authed(r) {
+				writeJSON(w, 401, map[string]any{"error": "unauthenticated"})
+				return
+			}
+			s.mu.Lock()
+			on := s.Timers
+			s.mu.Unlock()
+			if !on {
+				writeJSON(w, 404, map[string]any{"error": "not-found"})
+				return
+			}
+			h(w, r, r.PathValue("name"))
+		})
+	}
+	timerRoute("GET /api/system/v1/addon-timers", func(w http.ResponseWriter, r *http.Request, _ string) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		list := []FakeTimer{}
+		for _, t := range s.timers {
+			list = append(list, *t)
+		}
+		writeJSON(w, 200, map[string]any{"addon": "sync", "timers": list, "max": 32, "readable": s.Readable})
+	})
+	timerRoute("PUT /api/system/v1/addon-timers/{name}", func(w http.ResponseWriter, r *http.Request, name string) {
+		var in struct {
+			Timer       string    `json:"timer"`
+			Description *string   `json:"description"`
+			Read        *[]string `json:"read"`
+			Enabled     *bool     `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			writeJSON(w, 422, map[string]any{"error": "invalid-body", "message": err.Error()})
+			return
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		t, had := s.timers[name]
+		if !had {
+			if strings.TrimSpace(in.Timer) == "" {
+				writeJSON(w, 422, map[string]any{"error": "invalid", "message": "a new timer needs its timer text"})
+				return
+			}
+			t = &FakeTimer{Name: name, Unit: "local-sync-" + name + ".timer", Service: "local-sync-" + name + ".service", Enabled: true, Read: []string{}, Addon: "sync"}
+			t.ServiceFile = "[Service]\nType=oneshot\nExecStart=/usr/local/addons/sync/bin/lite-sync run " + name + "\nUser=addon-sync\n"
+		}
+		if strings.Contains(in.Timer, "Unit=") || (in.Timer != "" && !strings.Contains(in.Timer, "[Timer]")) {
+			writeJSON(w, 422, map[string]any{"error": "invalid", "message": "timer: not allowed in an addon's timer"})
+			return
+		}
+		if in.Timer != "" {
+			t.TimerFile = in.Timer
+		}
+		if in.Description != nil {
+			t.Description = *in.Description
+		}
+		if in.Read != nil {
+			for _, id := range *in.Read {
+				ok := false
+				for _, r := range s.Readable {
+					ok = ok || r == id
+				}
+				if !ok {
+					writeJSON(w, 422, map[string]any{"error": "invalid", "message": "read: the addon " + id + " is not installed"})
+					return
+				}
+			}
+			t.Read = *in.Read
+		}
+		if in.Enabled != nil {
+			t.Enabled = *in.Enabled
+		}
+		s.timers[name] = t
+		st := 200
+		if !had {
+			st = 201
+		}
+		writeJSON(w, st, t)
+	})
+	timerRoute("DELETE /api/system/v1/addon-timers/{name}", func(w http.ResponseWriter, r *http.Request, name string) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if _, ok := s.timers[name]; !ok {
+			writeJSON(w, 404, map[string]any{"error": "not-found"})
+			return
+		}
+		delete(s.timers, name)
+		writeJSON(w, 200, map[string]any{"ok": true})
+	})
+	action := func(what string) {
+		timerRoute("POST /api/system/v1/addon-timers/{name}/"+what, func(w http.ResponseWriter, r *http.Request, name string) {
+			s.mu.Lock()
+			t, ok := s.timers[name]
+			run, stop := s.RunJob, s.StopJob
+			if ok {
+				switch what {
+				case "enable":
+					t.Enabled = true
+				case "disable":
+					t.Enabled = false
+				}
+			}
+			s.mu.Unlock()
+			if !ok {
+				writeJSON(w, 404, map[string]any{"error": "not-found"})
+				return
+			}
+			if what == "run" && run != nil {
+				run(name)
+			}
+			if what == "stop" && stop != nil {
+				stop(name)
+			}
+			writeJSON(w, 200, map[string]any{"ok": true})
+		})
+	}
+	for _, what := range []string{"run", "stop", "enable", "disable"} {
+		action(what)
+	}
+	mux.HandleFunc("GET /api/system/v1/timers", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		list := []map[string]any{}
+		for _, t := range s.timers {
+			row := map[string]any{"unit": t.Unit, "activates": t.Service, "own": true, "addon": "sync", "enabled": t.Enabled, "active": t.Enabled}
+			if t.Enabled {
+				row["next"] = "2026-11-18T03:00:00Z"
+			}
+			list = append(list, row)
+		}
+		writeJSON(w, 200, map[string]any{"systemd": true, "timers": list})
+	})
 	// the stand-in OAuth provider: the consent page is skipped, the browser is sent straight back
 	mux.HandleFunc("GET /oauth/authorize", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -96,6 +279,26 @@ func (s *Server) Handler() http.Handler {
 		}
 		if q.Get("unused") != "" {
 			s.Used = map[string]string{}
+		}
+		if v := q.Get("timers"); v != "" {
+			s.Timers = v == "1"
+		}
+		if v := q.Get("readable"); v != "" {
+			s.Readable = strings.Split(v, ",")
+		}
+		// what a person does on the Services page: edit a timer's text, switch it, delete it
+		if name := q.Get("timer"); name != "" {
+			if t, ok := s.timers[name]; ok {
+				if v := q.Get("text"); v != "" {
+					t.TimerFile = v
+				}
+				if v := q.Get("enabled"); v != "" {
+					t.Enabled = v == "1"
+				}
+				if q.Get("delete") != "" {
+					delete(s.timers, name)
+				}
+			}
 		}
 		s.mu.Unlock()
 		writeJSON(w, 200, map[string]any{"ok": true})
