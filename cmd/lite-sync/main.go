@@ -25,6 +25,7 @@ import (
 
 	"github.com/openccu-lite/lite-addon-sync/internal/accounts"
 	"github.com/openccu-lite/lite-addon-sync/internal/httpapi"
+	"github.com/openccu-lite/lite-addon-sync/internal/notices"
 	"github.com/openccu-lite/lite-addon-sync/internal/provider"
 	"github.com/openccu-lite/lite-addon-sync/internal/rclone"
 	"github.com/openccu-lite/lite-addon-sync/internal/sysinfo"
@@ -34,9 +35,9 @@ import (
 var version = "dev"
 
 type options struct {
-	addonDir, confDir, id, base, basePath, www, rcloneBin, socket, tokenFile, oauthExtra string
-	port                                                                                 int
-	noSession, anyPeer                                                                   bool
+	addonDir, confDir, id, base, basePath, www, rcloneBin, socket, tokenFile, oauthExtra, noticesURL string
+	port                                                                                             int
+	noSession, anyPeer                                                                               bool
 }
 
 func main() {
@@ -55,6 +56,7 @@ func main() {
 	flag.BoolVar(&o.noSession, "no-session-check", false, "serve the page without the session check (development only)")
 	flag.BoolVar(&o.anyPeer, "any-peer", false, "serve the provider's socket to this process's own user too (tests only)")
 	flag.StringVar(&o.oauthExtra, "oauth-extra", "", "extra rclone options for a login, as JSON (tests only: the provider's addresses)")
+	flag.StringVar(&o.noticesURL, "notices", "http://127.0.0.1:8183", "the system service's loopback address for the addon's notices on the Status page (empty: none)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *showVersion {
@@ -133,6 +135,19 @@ func run(o options) error {
 		setProvider(true, "")
 		go func() { perr <- psrv.Serve(ctx, l) }()
 		defer os.Remove(o.socket)
+	}
+
+	// a login that is about to lapse is said on the system's Status page (an addon notice)
+	if o.noticesURL != "" && !o.noSession {
+		nt := &notices.Notifier{Base: o.noticesURL, TokenFile: filepath.Join(notices.ControlTokenDir, o.id), AddonID: o.id, Accounts: store.List, Log: logf}
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Minute): // the system mints the token at its own start
+			}
+			nt.Run(ctx)
+		}()
 	}
 
 	var token addonkit.TokenSource

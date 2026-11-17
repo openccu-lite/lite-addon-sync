@@ -76,6 +76,9 @@ type Account struct {
 	State   string    `json:"state"`
 	Text    string    `json:"text,omitempty"`
 	Checked time.Time `json:"checked,omitzero"`
+	// LastOK is when the account last answered: its login was in use then. OneDrive ends a login
+	// that is not used for 90 days.
+	LastOK time.Time `json:"last_ok,omitzero"`
 	// UploadLimit is the rate limit of uploads in KiB/s, 0 = none.
 	UploadLimit int `json:"upload_limit_kbps"`
 	// LastUpload is the last backup this account took.
@@ -443,6 +446,7 @@ func (s *Store) configure(ctx context.Context, a *Account, sp Spec, token string
 		return err
 	}
 	a.State, a.Text, a.Checked, a.Free, a.Total = rclone.StateWritable, "", s.now().UTC(), space.Free, space.Total
+	a.LastOK = a.Checked
 	return nil
 }
 
@@ -484,6 +488,7 @@ func (s *Store) Relogin(ctx context.Context, id string, sp Spec, token string) (
 	}
 	return s.update(id, func(a *Account) {
 		a.Detail, a.Root, a.State, a.Text, a.Checked, a.Free, a.Total = next.Detail, next.Root, next.State, "", next.Checked, next.Free, next.Total
+		a.LastOK = next.Checked
 		a.OwnClient = sp.ClientID != ""
 		a.Auth = next.Auth
 	})
@@ -539,6 +544,8 @@ func (s *Store) Note(id string, err error, space *rclone.Space) (Account, error)
 		a.State, a.Text, a.Checked = rclone.StateOf(err), "", s.now().UTC()
 		if err != nil {
 			a.Text = err.Error()
+		} else {
+			a.LastOK = a.Checked
 		}
 		if space != nil && err == nil {
 			a.Free, a.Total = space.Free, space.Total

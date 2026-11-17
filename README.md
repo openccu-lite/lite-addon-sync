@@ -45,7 +45,7 @@ Was die Anbieter verlangen:
 
 | Anbieter | Client-ID | Hinweise |
 | --- | --- | --- |
-| **OneDrive** | optional (sonst die Registrierung von rclone) | Die Anmeldung verfällt nach 90 Tagen ohne Hochladen; mit der nächtlichen Sicherung bleibt sie gültig. Danach: *Erneut anmelden* |
+| **OneDrive** | optional (sonst die Registrierung von rclone) | Die Anmeldung verfällt nach 90 Tagen ohne Hochladen; mit der nächtlichen Sicherung bleibt sie gültig. Zwei Wochen vorher meldet es die Statusseite des Systems. Danach: *Erneut anmelden* |
 | **Google Drive** | **eine eigene ist nötig**: Die von rclone geteilte wird abgeschaltet. In der Google-Cloud-Konsole einen OAuth-Client vom Typ *Desktop-App* anlegen ([Schritt für Schritt bei rclone](https://rclone.org/drive/#making-your-own-client-id)) und die App **veröffentlichen** – im Status *Testing* verfällt die Anmeldung nach 7 Tagen | Das Addon sieht nur, was es selbst angelegt hat (`drive.file`). Alternative ohne Browser: ein **Dienstkonto** (JSON-Schlüssel) und ein Ordner Ihres Drive, den Sie für dessen Adresse freigeben |
 | **Dropbox** | optional (sonst die App von rclone, mit geteilten Limits) | Eine eigene App vom Typ *App-Ordner* beschränkt das System auf einen Ordner Ihrer Dropbox |
 

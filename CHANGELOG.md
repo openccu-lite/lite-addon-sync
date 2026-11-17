@@ -14,6 +14,8 @@ The first version, for openccu-lite 2.0.0-beta.7 and newer (the first with backu
   Drive with a client ID of your own or a service account; S3-compatible storage and WebDAV (Nextcloud) by keys.
   Test, log in again or change the keys (the account and every target on it stay), an upload limit, remove - an
   account a backup target uses is not removed unseen.
+- **A login about to lapse** is said on the system's Status page two weeks before (OneDrive ends a login that was
+  not used for 90 days), with the way to *Log in again*.
 - **rclone 1.76.0** is in the package (upstream's release binary, pinned by its SHA-256), never in the system image.
   A workflow follows rclone's releases.
 - **No privilege:** the addon runs as its own user, opens no port, reads nothing of the system and contacts nothing

@@ -40,7 +40,7 @@ What the providers ask for:
 
 | Provider | Client ID | Notes |
 | --- | --- | --- |
-| **OneDrive** | optional (else rclone's registration) | The login lapses after 90 days without an upload; the nightly backup keeps it alive. After that: *Log in again* |
+| **OneDrive** | optional (else rclone's registration) | The login lapses after 90 days without an upload; the nightly backup keeps it alive. Two weeks before, the system's Status page says so. After that: *Log in again* |
 | **Google Drive** | **your own is needed**: the one rclone shares is being retired. Create an OAuth client of the type *Desktop app* in the Google Cloud console ([step by step at rclone](https://rclone.org/drive/#making-your-own-client-id)) and **publish** the app - in the *Testing* status the login lapses after 7 days | The addon sees only what it made itself (`drive.file`). The way without a browser: a **service account** (a JSON key) and a folder of your Drive that you share with its address |
 | **Dropbox** | optional (else rclone's app, with shared limits) | An app of your own of the type *App folder* confines the system to one folder of your Dropbox |
 
