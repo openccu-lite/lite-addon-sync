@@ -239,8 +239,8 @@ func run(o options) error {
 				items = append(items, notices.Item{ID: "overdue-" + j.ID, Link: "/addon-settings/" + o.id + "#jobs",
 					Title: map[string]string{"de": fmt.Sprintf("Der Kopierauftrag „%s“ ist überfällig", j.Name), "en": fmt.Sprintf("The copy job \"%s\" is overdue", j.Name)},
 					Text: map[string]string{
-						"de": fmt.Sprintf("Sein letzter erfolgreicher Lauf war am %s. Der Verlauf des Addons zeigt, woran die Läufe seitdem gescheitert sind.", day),
-						"en": fmt.Sprintf("Its last run that worked was on %s. The addon's history shows why the runs since then failed.", day),
+						"de": fmt.Sprintf("Seit dem %s ist kein Lauf gelungen. Der Verlauf des Addons zeigt, woran die Läufe gescheitert sind.", day),
+						"en": fmt.Sprintf("No run of it has worked since %s. The addon's history shows why the runs failed.", day),
 					}})
 			}
 			return items, true
