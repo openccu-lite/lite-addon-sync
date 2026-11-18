@@ -139,10 +139,19 @@ func (r *Runner) failure(ctx context.Context, args []string, err error, stderr s
 		text = err.Error()
 	}
 	e := &Error{State: Classify(stderr, exit), Text: text, Exit: exit}
-	if ctx.Err() != nil {
+	// rclone was stopped because its context ended. A deadline is a limit that was hit; a context
+	// that was cancelled is a caller that went away - the system read the first bytes of a backup
+	// to see which key it needs and hung up, a page was closed. That stop is wanted and no failure
+	// of the account: it is not logged.
+	quiet := false
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		e.State, e.Text = StateUnreachable, "the transfer was stopped: it took longer than its limit"
+	case ctx.Err() != nil:
+		e.State, e.Text = StateUnreachable, "the transfer was stopped: the caller went away"
+		quiet = true
 	}
-	if r.Log != nil {
+	if r.Log != nil && !quiet {
 		r.Log("rclone %s: exit %d, %s: %s", verb(args), exit, e.State, e.Text)
 	}
 	if e.State == "not-found" {

@@ -477,11 +477,28 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 	defer rc.Close()
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", fmt.Sprint(size))
-	n, err := io.Copy(w, rc)
-	if err != nil || n != size {
-		// the length was promised: a short body is the reader's sign that the file did not arrive
+	cw := &clientWriter{w: w}
+	n, err := io.Copy(cw, rc)
+	// the length was promised: a short body is the reader's sign that the file did not arrive. The
+	// system often wants only the first bytes (an encrypted backup's header names its key) and
+	// hangs up; that is no failed download and is not logged.
+	if (err != nil || n != size) && cw.err == nil && r.Context().Err() == nil {
 		s.logf("download of %s from %s (%s) ended after %d of %d bytes: %v", name, a.Name, a.ID, n, size, err)
 	}
+}
+
+// clientWriter remembers whether a write to the client failed: then the client went away.
+type clientWriter struct {
+	w   io.Writer
+	err error
+}
+
+func (c *clientWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	if err != nil && c.err == nil {
+		c.err = err
+	}
+	return n, err
 }
 
 func (s *Server) del(w http.ResponseWriter, r *http.Request) {

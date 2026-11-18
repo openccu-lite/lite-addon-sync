@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -251,5 +253,74 @@ func TestValidFolder(t *testing.T) {
 		if ValidFolder(f) != want {
 			t.Errorf("%q: want %v", f, want)
 		}
+	}
+}
+
+// brokenCat is a remote whose download stops with an error after `after` bytes.
+type brokenCat struct {
+	*memRemote
+	after int
+}
+
+func (b brokenCat) Cat(ctx context.Context, path string) (io.ReadCloser, error) {
+	rc, err := b.memRemote.Cat(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	return io.NopCloser(io.MultiReader(io.LimitReader(rc, int64(b.after)), iotestErr{})), nil
+}
+
+type iotestErr struct{}
+
+func (iotestErr) Read([]byte) (int, error) { return 0, errors.New("connection reset by peer") }
+
+// The system reads only an encrypted backup's first bytes (its header names the key) and hangs up:
+// that is no failed download and says nothing in the log. A download that the remote breaks off is
+// still logged.
+func TestGetALeftReadIsNoFailure(t *testing.T) {
+	_, mem, a, store := rig(t)
+	var mu sync.Mutex
+	var lines []string
+	logf := func(format string, args ...any) {
+		mu.Lock()
+		lines = append(lines, fmt.Sprintf(format, args...))
+		mu.Unlock()
+	}
+	name := "ccu-2.0.0-2026-11-18-0126.sbk.age"
+	body := bytes.Repeat([]byte("age-encryption.org/v1 "), 1<<20) // 22 MB: more than any buffer on the way
+	mem.files["acc-"+a.ID+":f/"+name] = body
+	url := "/v1/destinations/" + a.ID + "/files/" + name + "?folder=f"
+
+	ts := httptest.NewServer((&Server{Accounts: store, Remote: mem, Log: logf}).Handler())
+	defer ts.Close()
+	res, err := http.Get(ts.URL + url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := make([]byte, 4096)
+	if _, err := io.ReadFull(res.Body, head); err != nil || !bytes.HasPrefix(head, []byte("age-encryption.org/v1")) {
+		t.Fatalf("the header: %v %q", err, head[:30])
+	}
+	res.Body.Close()
+	time.Sleep(300 * time.Millisecond)
+	mu.Lock()
+	if len(lines) != 0 {
+		t.Errorf("a read the system ended was logged: %q", lines)
+	}
+	mu.Unlock()
+
+	ts2 := httptest.NewServer((&Server{Accounts: store, Remote: brokenCat{mem, 1000}, Log: logf}).Handler())
+	defer ts2.Close()
+	res, err = http.Get(ts2.URL + url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, _ := io.Copy(io.Discard, res.Body)
+	res.Body.Close()
+	time.Sleep(100 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if n == int64(len(body)) || len(lines) != 1 || !strings.Contains(lines[0], "ended after 1000 of") || !strings.Contains(lines[0], "connection reset by peer") {
+		t.Errorf("a download the remote broke off: %d bytes, log %q", n, lines)
 	}
 }

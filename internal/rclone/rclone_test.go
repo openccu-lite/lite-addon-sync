@@ -1,8 +1,15 @@
 package rclone
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestClassify(t *testing.T) {
@@ -58,5 +65,37 @@ func TestLastLineAndPath(t *testing.T) {
 func TestStateOf(t *testing.T) {
 	if StateOf(nil) != StateWritable || StateOf(errors.New("x")) != StateError || StateOf(&Error{State: StateFull}) != StateFull {
 		t.Fatal("StateOf")
+	}
+}
+
+// rclone stopped by its context: a deadline is a limit that was hit and logged; a cancelled
+// context is a caller that went away - wanted, and not logged.
+func TestAStoppedCallIsLoggedOnlyForADeadline(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "rclone")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexec sleep 10\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	r := &Runner{Bin: bin, Config: filepath.Join(dir, "rclone.conf"), Home: dir, Log: func(f string, a ...any) { lines = append(lines, fmt.Sprintf(f, a...)) }}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	_, err := r.run(ctx, nil, "lsjson", "x:")
+	cancel()
+	if StateOf(err) != StateUnreachable || !strings.Contains(err.Error(), "longer than its limit") || len(lines) != 1 {
+		t.Fatalf("a deadline: %v, log %q", err, lines)
+	}
+
+	lines = nil
+	ctx, cancel = context.WithCancel(context.Background())
+	rc, err := r.Cat(ctx, "x:f/a.sbk.age")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.AfterFunc(200*time.Millisecond, cancel)
+	_, err = io.Copy(io.Discard, rc)
+	_ = rc.Close()
+	if err == nil || !strings.Contains(err.Error(), "caller went away") || len(lines) != 0 {
+		t.Fatalf("a caller that went away: %v, log %q", err, lines)
 	}
 }
