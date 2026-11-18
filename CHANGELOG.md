@@ -9,8 +9,9 @@
 - **A copy job whose key an SSH server refuses says *login refused*** (as the server's card does), not *login
   expired*: nothing expires there - the line is not, or no longer, in the server's `authorized_keys`. *Login
   expired* stays for accounts.
-- Tried on a Raspberry Pi 4 (aarch64) and the virtual appliance (x86_64): a WebDAV account as a backup target with
-  an encrypted backup, an encrypted copy job with versions, a copy job with rsync to another system over SSH.
+- Tried on a Raspberry Pi 4 (aarch64; 0.4.0 had been tried only on the virtual appliance): a WebDAV account as a
+  backup target with an encrypted backup, an encrypted copy job with versions, a copy job with rsync to another
+  system over SSH.
 
 ## [0.4.0] - 2026-11-17
 
