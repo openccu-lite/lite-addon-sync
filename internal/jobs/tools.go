@@ -187,7 +187,7 @@ func rsyncResult(exit int, stderr string) string {
 	case servers.StateHostKeyChanged, servers.StateHostKeyUnknown:
 		return ResultHostKey
 	case servers.StateAuthFailed:
-		return ResultLoginExpired
+		return ResultLoginRefused
 	case servers.StateUnreachable:
 		return ResultUnreachable
 	}

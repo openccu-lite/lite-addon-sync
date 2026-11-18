@@ -153,6 +153,7 @@ export const RUN_PILLS: Record<string, string> = {
     'too-many-deletions': 'too many deletions',
     'target-unreachable': 'target unreachable',
     'login-expired': 'login expired',
+    'login-refused': 'login refused',
     'host-key-changed': 'host key changed',
     'quota-full': 'storage full',
     'source-missing': 'source missing',

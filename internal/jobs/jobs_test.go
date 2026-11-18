@@ -437,7 +437,7 @@ func TestParseRsync(t *testing.T) {
 	for text, want := range map[string]string{
 		"Host key verification failed.":                                        ResultHostKey,
 		"@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @":                 ResultHostKey,
-		"backup@nas: Permission denied (publickey,password).":                  ResultLoginExpired,
+		"backup@nas: Permission denied (publickey,password).":                  ResultLoginRefused,
 		"ssh: connect to host nas port 22: Connection refused":                 ResultUnreachable,
 		"ssh: Could not resolve hostname nas: Name or service not known":       ResultUnreachable,
 		`rsync: [receiver] write failed on "/x": No space left on device (28)`: ResultFull,

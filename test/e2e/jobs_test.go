@@ -381,7 +381,7 @@ func TestCopyJobWithRsyncOverSSH(t *testing.T) {
 	if v, _ = store.Test(ctx, srv.ID); v.State != servers.StateAuthFailed {
 		t.Fatalf("before the key is on the server: %+v", v)
 	}
-	if rec, err := jobs.Run(ctx, f.env, early.ID); err == nil || rec.Result != jobs.ResultLoginExpired {
+	if rec, err := jobs.Run(ctx, f.env, early.ID); err == nil || rec.Result != jobs.ResultLoginRefused {
 		t.Errorf("a run with a refused key: %+v %v", rec, err)
 	}
 	// the line the page shows goes into authorized_keys as it is, "restrict" and all

@@ -33,13 +33,16 @@ import (
 
 // The results of a run.
 const (
-	ResultOK              = "ok"
-	ResultWarnings        = "warnings" // done, but some files could not be copied
-	ResultFailed          = "failed"
-	ResultStopped         = "stopped"
-	ResultTooManyDeletes  = "too-many-deletions"
-	ResultUnreachable     = "target-unreachable"
-	ResultLoginExpired    = "login-expired"
+	ResultOK             = "ok"
+	ResultWarnings       = "warnings" // done, but some files could not be copied
+	ResultFailed         = "failed"
+	ResultStopped        = "stopped"
+	ResultTooManyDeletes = "too-many-deletions"
+	ResultUnreachable    = "target-unreachable"
+	ResultLoginExpired   = "login-expired"
+	// ResultLoginRefused: an SSH server refused the job's key (it is not, or no longer, in the
+	// server's authorized_keys). Nothing expired there; the account's word is login-expired.
+	ResultLoginRefused    = "login-refused"
 	ResultHostKey         = "host-key-changed"
 	ResultFull            = "quota-full"
 	ResultSourceMissing   = "source-missing"

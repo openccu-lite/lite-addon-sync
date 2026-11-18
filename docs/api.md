@@ -70,7 +70,7 @@ timer is now; `calendar` for a custom one), `timer: {unit, exists, enabled, next
 
 **`Run`:** `{id, job, job_name, start, end, trigger: "timer"|"page", dry_run, tool: "rsync"|"rclone", result, copied,
 replaced, deleted, errors, bytes, exit, error?, log_cut?}`. `result`: `ok`, `warnings`, `failed`, `stopped`,
-`too-many-deletions`, `target-unreachable`, `login-expired`, `host-key-changed`, `quota-full`, `source-missing`,
+`too-many-deletions`, `target-unreachable`, `login-expired` (an account), `login-refused` (an SSH server refused the key), `host-key-changed`, `quota-full`, `source-missing`,
 `target-missing`, `busy`, `dry-run-first`.
 
 **`Spec`:** `{name, kind}` and, by kind: `onedrive`, `dropbox`: `client_id?`, `client_secret?` (both or neither);
