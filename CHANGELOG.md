@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.1] - 2026-11-18
+
+- **A look at the backups on a cloud target no longer fills the log with failed downloads.** The system reads only
+  the first bytes of an encrypted backup to see which recovery key it needs and then hangs up; the addon logged that
+  as "the transfer was stopped: it took longer than its limit" and "download … ended after … bytes", twice per
+  backup each time the Backup page listed them. A download the account itself breaks off is still logged.
+- **A copy job whose key an SSH server refuses says *login refused*** (as the server's card does), not *login
+  expired*: nothing expires there - the line is not, or no longer, in the server's `authorized_keys`. *Login
+  expired* stays for accounts.
+- Tried on a Raspberry Pi 4 (aarch64) and the virtual appliance (x86_64): a WebDAV account as a backup target with
+  an encrypted backup, an encrypted copy job with versions, a copy job with rsync to another system over SSH.
+
 ## [0.4.0] - 2026-11-17
 
 - **Encrypted copies:** a copy job to an account can encrypt what it copies - contents, file names and folder names
