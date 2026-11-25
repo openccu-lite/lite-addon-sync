@@ -54,6 +54,7 @@ type manifest struct {
 		ReadAddonData bool              `json:"read_addon_data"`
 		APIScopes     []string          `json:"api_scopes"`
 		Note          map[string]string `json:"note"`
+		Technical     map[string]string `json:"technical"`
 	} `json:"runtime"`
 }
 
@@ -130,12 +131,16 @@ func TestManifest(t *testing.T) {
 	if m.Release.Asset != "sync-{arch}-{version}.tar.gz" || m.Release.GitHub != "openccu-lite/lite-addon-sync" {
 		t.Errorf("release %+v", m.Release)
 	}
-	if m.Description["de"] == "" || m.Description["en"] == "" || rt.Note["de"] == "" || rt.Note["en"] == "" {
-		t.Error("the description and the note in both languages")
+	if m.Description["de"] == "" || m.Description["en"] == "" || rt.Technical["de"] == "" || rt.Technical["en"] == "" ||
+		rt.Note["de"] == "" || rt.Note["en"] == "" {
+		t.Error("the description, the note and the technical text in both languages")
 	}
-	// the note is the catalogue's text for users (occulited task 188), no longer the technical account
-	// of scopes, ports and contacts; those are the manifest's keys
-	for _, text := range []string{m.Description["de"], m.Description["en"], rt.Note["de"], rt.Note["en"]} {
+	for _, want := range []string{"Contacts nothing until", "encrypted", "system:read", "socket", "timers:addon", "never the settings", "that addon's group", "host key"} {
+		if !strings.Contains(rt.Technical["en"], want) {
+			t.Errorf("the technical text does not say %q", want)
+		}
+	}
+	for _, text := range []string{m.Description["de"], m.Description["en"], rt.Technical["de"], rt.Note["de"], rt.Technical["en"], rt.Note["en"]} {
 		if regexp.MustCompile(`(?i)\bbox\b`).MatchString(text) {
 			t.Errorf("user-facing text says box: %s", text)
 		}
