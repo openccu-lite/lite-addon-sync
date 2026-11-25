@@ -133,11 +133,8 @@ func TestManifest(t *testing.T) {
 	if m.Description["de"] == "" || m.Description["en"] == "" || rt.Note["de"] == "" || rt.Note["en"] == "" {
 		t.Error("the description and the note in both languages")
 	}
-	for _, want := range []string{"Contacts nothing until", "encrypted", "system:read", "socket", "timers:addon", "never the settings", "that addon's group", "host key"} {
-		if !strings.Contains(rt.Note["en"], want) {
-			t.Errorf("the note does not say %q", want)
-		}
-	}
+	// the note is the catalogue's text for users (occulited task 188), no longer the technical account
+	// of scopes, ports and contacts; those are the manifest's keys
 	for _, text := range []string{m.Description["de"], m.Description["en"], rt.Note["de"], rt.Note["en"]} {
 		if regexp.MustCompile(`(?i)\bbox\b`).MatchString(text) {
 			t.Errorf("user-facing text says box: %s", text)
